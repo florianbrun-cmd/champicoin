@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Champicoin</title>
+  <meta name="theme-color" content="#4a6741">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Écran de connexion à un groupe -->
+  <div id="ecran-groupe" class="ecran">
+    <div class="carte-login">
+      <h1>🍄 Champicoin</h1>
+      <p class="sous-titre">Tes coins à champignons, en toute discrétion.</p>
+
+      <div class="onglets">
+        <button class="onglet actif" data-onglet="rejoindre">Rejoindre un groupe</button>
+        <button class="onglet" data-onglet="creer">Créer un groupe</button>
+      </div>
+
+      <form id="form-rejoindre" class="form-onglet">
+        <label for="code-groupe">Code d'accès</label>
+        <input type="text" id="code-groupe" placeholder="Ex : CEPE-4821" required autocomplete="off">
+        <button type="submit">Rejoindre</button>
+        <p class="erreur" id="erreur-rejoindre"></p>
+      </form>
+
+      <form id="form-creer" class="form-onglet cache">
+        <label for="nom-groupe">Nom du groupe</label>
+        <input type="text" id="nom-groupe" placeholder="Ex : Famille Dupont" required autocomplete="off">
+        <button type="submit">Créer le groupe</button>
+        <p class="erreur" id="erreur-creer"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Écran principal : la carte -->
+  <div id="ecran-carte" class="ecran cache">
+    <header class="entete">
+      <div>
+        <strong id="nom-groupe-actif"></strong>
+        <span id="statut-connexion" class="statut">en ligne</span>
+      </div>
+      <div class="entete-actions">
+        <button id="btn-filtre" class="btn-icone" title="Filtrer par type">▽</button>
+        <button id="btn-quitter-groupe" class="btn-icone" title="Changer de groupe">⇄</button>
+      </div>
+    </header>
+
+    <div id="barre-filtre" class="barre-filtre cache"></div>
+
+    <div id="carte"></div>
+
+    <button id="btn-localiser" class="btn-flottant" title="Me localiser et ajouter un point">📍</button>
+
+    <div id="compteur-attente" class="badge-attente cache">0 point(s) en attente de synchro</div>
+  </div>
+
+  <!-- Formulaire d'ajout de champignon -->
+  <div id="modal-ajout" class="modal cache">
+    <div class="modal-contenu">
+      <h2 id="titre-modal-ajout">Nouveau coin 🍄</h2>
+      <form id="form-champignon">
+        <input type="hidden" id="id-champignon-edite">
+        <label for="type-champignon">Type de champignon</label>
+        <input type="text" id="type-champignon" placeholder="Ex : Cèpe de Bordeaux" required autocomplete="off">
+
+        <label for="date-trouvee">Date</label>
+        <input type="date" id="date-trouvee" required>
+
+        <label for="notes-champignon">Notes (optionnel)</label>
+        <textarea id="notes-champignon" placeholder="Sous les chênes, versant nord..."></textarea>
+
+        <div class="modal-actions">
+          <button type="button" id="btn-annuler-ajout" class="btn-secondaire">Annuler</button>
+          <button type="submit" class="btn-principal">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Détail d'un point existant -->
+  <div id="modal-detail" class="modal cache">
+    <div class="modal-contenu">
+      <h2 id="detail-type"></h2>
+      <p id="detail-date" class="detail-date"></p>
+      <p id="detail-notes"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-supprimer-point" class="btn-danger">Supprimer</button>
+        <button type="button" id="btn-modifier-point" class="btn-secondaire">Modifier</button>
+        <button type="button" id="btn-fermer-detail" class="btn-principal">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
