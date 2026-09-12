@@ -15,7 +15,7 @@ const TYPE_VERS_ICONE = {
   'Pleurote': 'pleurote',
   'Bolet': 'bolet',
   'Mousseron': 'mousseron',
-  'Lactaire Améthyste': 'lactaire_amethyste'
+  'Laccaire Améthyste': 'lactaire_amethyste'
 };
 function iconePourType(type) { return TYPE_VERS_ICONE[type] || 'autre'; }
 function urlIcone(cle) { return `icons/champignons/${cle}.png`; }
@@ -29,7 +29,6 @@ const ecranCarte = document.getElementById('ecran-carte');
 const nomGroupeActif = document.getElementById('nom-groupe-actif');
 const statutConnexion = document.getElementById('statut-connexion');
 const compteurAttente = document.getElementById('compteur-attente');
-const texteCompteurAttente = document.getElementById('texte-compteur-attente');
 
 let carte;
 let coucheMarqueurs;
@@ -226,6 +225,12 @@ function tempsRelatif(dateStr) {
   return `il y a ${jours} j`;
 }
 
+function dateHeureComplete(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) +
+    ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
 document.getElementById('btn-membres').addEventListener('click', async () => {
   const zone = document.getElementById('contenu-membres');
   zone.innerHTML = '<p style="color:#888;">Chargement...</p>';
@@ -247,7 +252,7 @@ document.getElementById('btn-membres').addEventListener('click', async () => {
     zone.innerHTML = membres.map(m => `
       <div class="item-membre">
         <span class="item-membre-nom">${m.pseudo}</span>
-        <span class="item-membre-vu">${tempsRelatif(m.lastSeenAt)}</span>
+        <span class="item-membre-vu">${dateHeureComplete(m.lastSeenAt)} (${tempsRelatif(m.lastSeenAt)})</span>
       </div>
     `).join('');
   } catch (err) {
@@ -293,10 +298,34 @@ function initCarte() {
   ajouterControleLocalisation();
 
   carte.on('click', (e) => {
-    if (!modeAjoutManuel) return;
-    positionTemporaire = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: null, manuel: true };
-    desactiverModeAjoutManuel();
-    ouvrirModalAjout();
+    if (modeAjoutManuel) {
+      positionTemporaire = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: null, manuel: true };
+      desactiverModeAjoutManuel();
+      ouvrirModalAjout();
+      return;
+    }
+    // Un clic sur la carte referme les panneaux ouverts (filtre, liste)
+    if (!barreFiltre.classList.contains('cache')) {
+      barreFiltre.classList.add('cache');
+      btnFiltre.classList.remove('actif');
+    }
+    if (!panneauListe.classList.contains('cache')) {
+      panneauListe.classList.add('cache');
+      pileBoutonsFlottants.classList.remove('cache');
+      mettreAJourBadgeAttente();
+    }
+  });
+}
+
+function construireIconePosition(cap) {
+  const fleche = (cap === null || cap === undefined || isNaN(cap))
+    ? ''
+    : `<div class="marqueur-ma-position-fleche" style="transform: rotate(${cap}deg);"></div>`;
+  return L.divIcon({
+    className: 'marqueur-ma-position-conteneur',
+    html: `${fleche}<div class="marqueur-ma-position-point"></div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13]
   });
 }
 
@@ -305,11 +334,12 @@ function demarrerSuiviPosition() {
   navigator.geolocation.watchPosition(
     (pos) => {
       const latlng = [pos.coords.latitude, pos.coords.longitude];
+      const icone = construireIconePosition(pos.coords.heading);
       if (!marqueurPosition) {
-        const icone = L.divIcon({ className: 'marqueur-ma-position', iconSize: [18, 18] });
         marqueurPosition = L.marker(latlng, { icon: icone, zIndexOffset: 1000 }).addTo(carte);
       } else {
         marqueurPosition.setLatLng(latlng);
+        marqueurPosition.setIcon(icone);
       }
     },
     (err) => console.warn('Suivi de position indisponible :', err.message),
@@ -652,17 +682,16 @@ async function synchroniserPointsEnAttente(silencieux) {
 
   localStorage.setItem('champicoin_file_attente', JSON.stringify(restants));
   mettreAJourBadgeAttente();
-  if (restants.length === 0) chargerPoints();
+  chargerPoints(); // recharge toujours, pour retirer de la carte les points désormais synchronisés
 }
 
-document.getElementById('btn-forcer-synchro').addEventListener('click', () => synchroniserPointsEnAttente(false));
 document.getElementById('btn-synchro-entete').addEventListener('click', () => synchroniserPointsEnAttente(false));
 
 function mettreAJourBadgeAttente() {
   const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
   if (file.length > 0) {
-    texteCompteurAttente.textContent = `${file.length} point(s) en attente de synchro`;
-    compteurAttente.classList.remove('cache');
+    compteurAttente.textContent = `${file.length} point(s) en attente de synchro`;
+    if (panneauListe.classList.contains('cache')) compteurAttente.classList.remove('cache');
   } else {
     compteurAttente.classList.add('cache');
   }
@@ -718,7 +747,9 @@ function calculerPointsFiltres() {
   });
 }
 
-// --- Regroupement en "zones" : coins distants de moins de 20 m ---
+// --- Regroupement en "zones" : coins distants de moins de DISTANCE_ZONE_M ---
+const DISTANCE_ZONE_M = 50;
+
 function calculerZones(pointsAvecMeta) {
   const n = pointsAvecMeta.length;
   const parent = Array.from({ length: n }, (_, i) => i);
@@ -728,7 +759,7 @@ function calculerZones(pointsAvecMeta) {
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
       const d = distanceMetres(pointsAvecMeta[i].point.lat, pointsAvecMeta[i].point.lng, pointsAvecMeta[j].point.lat, pointsAvecMeta[j].point.lng);
-      if (d < 20) union(i, j);
+      if (d < DISTANCE_ZONE_M) union(i, j);
     }
   }
   const groupes = {};
@@ -739,9 +770,15 @@ function calculerZones(pointsAvecMeta) {
   return Object.values(groupes);
 }
 
+function filtresActifs() {
+  return typesFiltreActifs.size > 0 || moisFiltreActifs.size > 0 || departementsFiltreActifs.size > 0 ||
+    rechercheFiltre.value.trim() !== '';
+}
+
 function rafraichirAffichageCarte() {
   coucheMarqueurs.clearLayers();
-  const zones = calculerZones(calculerPointsFiltres());
+  const pointsFiltres = calculerPointsFiltres();
+  const zones = calculerZones(pointsFiltres);
   zones.forEach(zone => {
     if (zone.length === 1) {
       ajouterMarqueur(zone[0].point, zone[0].enAttente);
@@ -749,6 +786,12 @@ function rafraichirAffichageCarte() {
       ajouterMarqueurZone(zone);
     }
   });
+
+  if (filtresActifs() && pointsFiltres.length > 0) {
+    const bounds = L.latLngBounds(pointsFiltres.map(({ point }) => [point.lat, point.lng]));
+    carte.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
+  }
+
   if (!panneauListe.classList.contains('cache')) construireListe();
 }
 
@@ -758,7 +801,8 @@ function ajouterMarqueur(point, enAttente) {
   const icone = L.divIcon({
     className: (enAttente ? 'point-en-attente ' : '') + 'marqueur-champi',
     html: `${htmlIcone(point.mushroomType)}${badge}`,
-    iconSize: [28, 28]
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
   });
   const marqueur = L.marker([point.lat, point.lng], { icon: icone }).addTo(coucheMarqueurs);
   marqueur.on('click', () => afficherDetailPoint(point));
@@ -767,26 +811,45 @@ function ajouterMarqueur(point, enAttente) {
 function ajouterMarqueurZone(zone) {
   const latMoy = zone.reduce((s, z) => s + z.point.lat, 0) / zone.length;
   const lngMoy = zone.reduce((s, z) => s + z.point.lng, 0) / zone.length;
-  const icone = L.divIcon({ className: 'marqueur-zone-wrapper', html: `<div class="marqueur-zone">${zone.length}</div>`, iconSize: [34, 34] });
+  const icone = L.divIcon({
+    className: 'marqueur-zone-wrapper',
+    html: `<div class="marqueur-zone">${zone.length}</div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17]
+  });
   const marqueur = L.marker([latMoy, lngMoy], { icon: icone }).addTo(coucheMarqueurs);
   marqueur.on('click', () => afficherZone(zone));
 }
 
 function afficherZone(zone) {
+  // Fusionne les coins du même type au sein de la zone, pour ne pas répéter des lignes identiques
+  const parType = {};
+  zone.forEach(z => { (parType[z.point.mushroomType] = parType[z.point.mushroomType] || []).push(z); });
+
   const contenu = document.getElementById('contenu-zone');
-  contenu.innerHTML = zone.map((z, i) => `
-    <div class="item-zone" data-index="${i}">
-      ${htmlIcone(z.point.mushroomType)}
-      <div class="item-liste-texte">
-        <div class="item-liste-type">${z.point.mushroomType}</div>
-        <div class="item-liste-details">${formaterDate(z.point.dateFound)}</div>
+  contenu.innerHTML = Object.entries(parType).map(([type, entrees], idxGroupe) => {
+    const suffixe = entrees.length > 1 ? ` (×${entrees.length})` : '';
+    const datesTriees = [...entrees].sort((a, b) => new Date(b.point.dateFound) - new Date(a.point.dateFound));
+    return `
+      <div class="item-zone" data-groupe="${idxGroupe}" data-sous-index="0">
+        ${htmlIcone(type)}
+        <div class="item-liste-texte">
+          <div class="item-liste-type">${type}${suffixe}</div>
+          <div class="item-liste-details">${entrees.length > 1 ? 'plusieurs dates — voir le détail' : formaterDate(datesTriees[0].point.dateFound)}</div>
+        </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
+
+  const groupesTries = Object.values(parType);
   contenu.querySelectorAll('.item-zone').forEach(el => {
     el.addEventListener('click', () => {
+      const entrees = groupesTries[parseInt(el.dataset.groupe, 10)];
       document.getElementById('modal-zone').classList.add('cache');
-      afficherDetailPoint(zone[parseInt(el.dataset.index, 10)].point);
+      // On ouvre le plus récent des points de ce type ; l'historique complet reste
+      // consultable depuis la fenêtre de détail de chaque point.
+      const plusRecent = [...entrees].sort((a, b) => new Date(b.point.dateFound) - new Date(a.point.dateFound))[0];
+      afficherDetailPoint(plusRecent.point);
     });
   });
   document.getElementById('modal-zone').classList.remove('cache');
@@ -989,11 +1052,13 @@ btnListe.addEventListener('click', () => {
   panneauListe.classList.toggle('cache');
   const ouvert = !panneauListe.classList.contains('cache');
   pileBoutonsFlottants.classList.toggle('cache', ouvert);
-  if (ouvert) construireListe();
+  if (ouvert) { compteurAttente.classList.add('cache'); construireListe(); }
+  else mettreAJourBadgeAttente();
 });
 document.getElementById('btn-fermer-liste').addEventListener('click', () => {
   panneauListe.classList.add('cache');
   pileBoutonsFlottants.classList.remove('cache');
+  mettreAJourBadgeAttente();
 });
 triListe.addEventListener('change', construireListe);
 
@@ -1011,7 +1076,10 @@ function formaterDateHeure(dateStr) {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
 
+let pointActuellementAffiche = null;
+
 function afficherDetailPoint(point) {
+  pointActuellementAffiche = point;
   document.getElementById('detail-type').innerHTML = `${htmlIcone(point.mushroomType)} ${point.mushroomType}`;
   document.getElementById('detail-date').textContent = formaterDate(point.dateFound);
   document.getElementById('detail-notes').textContent = point.notes || '';
@@ -1055,6 +1123,12 @@ function afficherDetailPoint(point) {
 
 document.getElementById('btn-fermer-detail').addEventListener('click', () => {
   document.getElementById('modal-detail').classList.add('cache');
+});
+
+document.getElementById('btn-itineraire-point').addEventListener('click', () => {
+  if (!pointActuellementAffiche) return;
+  const { lat, lng } = pointActuellementAffiche;
+  window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
 });
 
 // Fermeture des modales en cliquant en dehors de leur contenu

@@ -316,6 +316,7 @@ html, body {
 
 .modal-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 22px;
 }
@@ -768,3 +769,48 @@ html, body {
   cursor: pointer;
 }
 .item-zone img { width: 26px; height: 26px; }
+
+/* ============================================
+   Nouveaux éléments (v5)
+   ============================================ */
+
+/* Halo blanc derrière chaque icône de champignon : les fait ressortir sur tous les fonds de carte */
+.marqueur-champi {
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  box-sizing: border-box;
+  padding: 1px;
+}
+
+/* Repère "ma position" avec flèche de direction */
+.marqueur-ma-position-conteneur {
+  position: relative;
+  width: 26px;
+  height: 26px;
+}
+.marqueur-ma-position-point {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  background: #4285f4;
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(66,133,244,0.4), 0 2px 6px rgba(0,0,0,0.3);
+}
+.marqueur-ma-position-fleche {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 13px solid #2a5cc7;
+  transform-origin: 50% 26px;
+  margin-top: -26px;
+  margin-left: -6px;
+}

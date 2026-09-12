@@ -117,10 +117,7 @@
     <div id="bandeau-placement-manuel" class="bandeau-info cache">Touche la carte à l'endroit du coin à enregistrer</div>
     <div id="bandeau-mode-avion" class="bandeau-info bandeau-avion cache">✈️ Mode hors-ligne forcé activé — aucune donnée mobile utilisée</div>
 
-    <div id="compteur-attente" class="badge-attente cache">
-      <span id="texte-compteur-attente"></span>
-      <button id="btn-forcer-synchro" class="btn-mini-synchro">🔄 Synchroniser</button>
-    </div>
+    <div id="compteur-attente" class="badge-attente cache"></div>
   </div>
 
   <!-- Formulaire d'ajout de champignon -->
@@ -136,17 +133,17 @@
           <img id="apercu-icone-type" src="icons/champignons/autre.png" class="apercu-icone">
           <select id="type-champignon" required>
             <option value="" disabled selected>Choisis un type</option>
+            <option>Bolet</option>
             <option>Cèpe</option>
             <option>Chanterelle (Girolle)</option>
+            <option>Laccaire Améthyste</option>
+            <option>Morille</option>
+            <option>Mousseron</option>
+            <option>Pied de mouton</option>
+            <option>Pleurote</option>
+            <option>Rosé des prés</option>
             <option>Trompette chanterelle</option>
             <option>Trompette de mort</option>
-            <option>Pied de mouton</option>
-            <option>Morille</option>
-            <option>Rosé des prés</option>
-            <option>Pleurote</option>
-            <option>Bolet</option>
-            <option>Mousseron</option>
-            <option>Lactaire Améthyste</option>
             <option value="autre">Autres</option>
           </select>
         </div>
@@ -179,6 +176,7 @@
       <div class="modal-actions">
         <button type="button" id="btn-supprimer-point" class="btn-danger">Supprimer</button>
         <button type="button" id="btn-modifier-point" class="btn-secondaire">Modifier</button>
+        <button type="button" id="btn-itineraire-point" class="btn-secondaire">🧭 Itinéraire</button>
         <button type="button" id="btn-fermer-detail" class="btn-principal">Fermer</button>
       </div>
     </div>
