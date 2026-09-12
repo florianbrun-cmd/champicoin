@@ -35,10 +35,14 @@
       </form>
 
       <form id="form-creer" class="form-onglet cache">
-        <label for="pseudo-creer">Ton prénom / pseudo</label>
-        <input type="text" id="pseudo-creer" placeholder="Ex : Florian" required autocomplete="off">
+        <label for="pseudo-creer">Ton prénom / pseudo (pour toi, si tu rejoins le groupe)</label>
+        <input type="text" id="pseudo-creer" placeholder="Ex : Florian" autocomplete="off">
         <label for="nom-groupe">Nom du groupe</label>
         <input type="text" id="nom-groupe" placeholder="Ex : Famille Dupont" required autocomplete="off">
+        <label class="ligne-case">
+          <input type="checkbox" id="rejoindre-apres-creation" checked>
+          Rejoindre ce groupe sur cet appareil
+        </label>
         <button type="submit">Créer le groupe</button>
         <p class="erreur" id="erreur-creer"></p>
       </form>
@@ -56,6 +60,9 @@
         <div class="code-groupe">Code : <span id="code-groupe-actif"></span></div>
       </div>
       <div class="entete-actions">
+        <button id="btn-synchro-entete" class="btn-icone" title="Forcer la synchronisation">🔄</button>
+        <button id="btn-mode-avion" class="btn-icone" title="Mode hors-ligne forcé (pour économiser les données à l'étranger)">✈️</button>
+        <button id="btn-membres" class="btn-icone" title="Membres du groupe">👥</button>
         <button id="btn-liste" class="btn-icone" title="Liste des points">☰</button>
         <button id="btn-filtre" class="btn-icone" title="Filtrer">▽</button>
         <button id="btn-quitter-groupe" class="btn-icone" title="Changer de groupe">⇄</button>
@@ -64,7 +71,14 @@
 
     <div id="barre-filtre" class="barre-filtre cache">
       <input type="text" id="recherche-filtre" placeholder="Rechercher un type...">
+      <div class="ligne-filtre-titre">Type</div>
       <div id="puces-filtre" class="puces-filtre"></div>
+      <div class="ligne-filtre-titre">Mois</div>
+      <div id="puces-filtre-mois" class="puces-filtre"></div>
+      <div class="ligne-filtre-titre">Département</div>
+      <div id="puces-filtre-departement" class="puces-filtre">
+        <button class="puce-filtre actif" id="puce-departement-charger">Charger les départements…</button>
+      </div>
     </div>
 
     <div id="carte"></div>
@@ -87,7 +101,8 @@
     </div>
 
     <!-- Boutons d'action flottants -->
-    <div class="pile-boutons-flottants">
+    <div id="pile-boutons-flottants" class="pile-boutons-flottants">
+      <button id="btn-supprimer-cache-carte" class="btn-flottant-secondaire" title="Supprimer les tuiles téléchargées">🗑️</button>
       <button id="btn-telecharger-carte" class="btn-flottant-secondaire" title="Télécharger la carte pour un usage hors-ligne">⬇️</button>
       <button id="btn-importer-gpx" class="btn-flottant-secondaire" title="Importer un fichier GPX">
         <img src="icons/gpx-icon.png" class="icone-bouton" alt="Importer GPX">
@@ -100,6 +115,7 @@
     <input type="file" id="fichier-gpx" accept=".gpx" class="cache">
 
     <div id="bandeau-placement-manuel" class="bandeau-info cache">Touche la carte à l'endroit du coin à enregistrer</div>
+    <div id="bandeau-mode-avion" class="bandeau-info bandeau-avion cache">✈️ Mode hors-ligne forcé activé — aucune donnée mobile utilisée</div>
 
     <div id="compteur-attente" class="badge-attente cache">
       <span id="texte-compteur-attente"></span>
@@ -164,6 +180,29 @@
         <button type="button" id="btn-supprimer-point" class="btn-danger">Supprimer</button>
         <button type="button" id="btn-modifier-point" class="btn-secondaire">Modifier</button>
         <button type="button" id="btn-fermer-detail" class="btn-principal">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Détail d'une zone (plusieurs coins proches) -->
+  <div id="modal-zone" class="modal cache">
+    <div class="modal-contenu">
+      <h2>📍 Coins de cette zone</h2>
+      <div id="contenu-zone"></div>
+      <div class="modal-actions">
+        <button type="button" id="btn-fermer-zone" class="btn-principal">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Membres du groupe -->
+  <div id="modal-membres" class="modal cache">
+    <div class="modal-contenu">
+      <h2>👥 Membres du groupe</h2>
+      <p class="note-membres">Toute personne ayant le code du groupe peut voir cette liste.</p>
+      <div id="contenu-membres"></div>
+      <div class="modal-actions">
+        <button type="button" id="btn-fermer-membres" class="btn-principal">Fermer</button>
       </div>
     </div>
   </div>

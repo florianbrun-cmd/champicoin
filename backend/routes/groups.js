@@ -79,4 +79,42 @@ router.put('/rename', async (req, res) => {
   }
 });
 
+// Signaler sa présence dans un groupe (pour la liste des membres)
+router.post('/presence', async (req, res) => {
+  try {
+    const { code, pseudo } = req.body;
+    if (!code || !pseudo) return res.status(400).json({ error: 'Code et pseudo requis.' });
+
+    const groupe = await Group.findOne({ code: code.trim().toUpperCase() });
+    if (!groupe) return res.status(404).json({ error: 'Groupe introuvable.' });
+
+    const membreExistant = groupe.members.find(m => m.pseudo === pseudo);
+    if (membreExistant) {
+      membreExistant.lastSeenAt = new Date();
+    } else {
+      groupe.members.push({ pseudo, lastSeenAt: new Date() });
+    }
+    await groupe.save();
+    res.json({ success: true });
+  } catch (erreur) {
+    console.error(erreur);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// Lister les membres connus d'un groupe
+router.get('/members', async (req, res) => {
+  try {
+    const { code } = req.query;
+    const groupe = await Group.findOne({ code: (code || '').trim().toUpperCase() });
+    if (!groupe) return res.status(404).json({ error: 'Groupe introuvable.' });
+
+    const membres = [...groupe.members].sort((a, b) => new Date(b.lastSeenAt) - new Date(a.lastSeenAt));
+    res.json({ members: membres });
+  } catch (erreur) {
+    console.error(erreur);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
 module.exports = router;

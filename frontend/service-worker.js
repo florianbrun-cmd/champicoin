@@ -4,7 +4,7 @@
 // - les tuiles de carte OSM sont mises en cache au fur et à mesure qu'on les consulte
 //   (donc les zones déjà visitées restent visibles hors-ligne)
 
-const CACHE_APP = 'champicoin-app-v7';
+const CACHE_APP = 'champicoin-app-v8';
 const CACHE_TUILES = 'champicoin-tuiles-v1';
 
 const FICHIERS_APP = [
@@ -52,6 +52,14 @@ self.addEventListener('activate', (event) => {
     )
   );
   self.clients.claim();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data === 'vider-cache-tuiles') {
+    caches.delete(CACHE_TUILES).then(() => {
+      if (event.source) event.source.postMessage('cache-tuiles-vide');
+    });
+  }
 });
 
 self.addEventListener('fetch', (event) => {
