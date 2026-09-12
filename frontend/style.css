@@ -143,6 +143,13 @@ html, body {
   background: #c0392b;
 }
 
+.code-groupe {
+  font-size: 11px;
+  opacity: 0.85;
+  margin-top: 2px;
+  letter-spacing: 0.5px;
+}
+
 .entete-actions {
   display: flex;
   gap: 8px;
@@ -269,6 +276,44 @@ html, body {
   resize: vertical;
 }
 
+.modal-contenu select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  background: white;
+}
+
+#type-champignon-autre {
+  margin-top: 8px;
+}
+
+.selecteur-icones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.puce-icone {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 2px solid #eee;
+  background: #f9f9f9;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.puce-icone.actif {
+  border-color: #3d5a35;
+  background: #eaf0e6;
+}
+
 .modal-actions {
   display: flex;
   gap: 10px;
@@ -306,7 +351,250 @@ html, body {
   font-size: 14px;
 }
 
-/* Icône de point non synchronisé (en attente) */
+/* Repère "ma position" en temps réel, façon Google Maps */
+.marqueur-ma-position {
+  width: 18px;
+  height: 18px;
+  background: #4285f4;
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(66,133,244,0.4), 0 2px 6px rgba(0,0,0,0.3);
+}
 .point-en-attente {
   filter: grayscale(40%) opacity(0.75);
+}
+
+/* ============================================
+   Nouveaux éléments (v2) : renommage, boutons
+   flottants, panneau liste, filtre avancé, etc.
+   ============================================ */
+
+.btn-lien {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0.85;
+  padding: 0 4px;
+}
+
+/* --- Pile de boutons flottants (bas droite) --- */
+.pile-boutons-flottants {
+  position: absolute;
+  bottom: 30px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  z-index: 500;
+}
+
+.btn-flottant {
+  position: static;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #e8871e;
+  border: none;
+  font-size: 26px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-flottant-secondaire {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: white;
+  border: 1px solid #ddd;
+  font-size: 18px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  cursor: pointer;
+}
+
+.btn-flottant-secondaire.actif {
+  background: #3d5a35;
+  color: white;
+  border-color: #3d5a35;
+}
+
+.icone-champi-plus {
+  position: relative;
+  display: inline-block;
+}
+
+.badge-plus {
+  position: absolute;
+  bottom: -4px;
+  right: -8px;
+  background: #3d5a35;
+  color: white;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  border: 2px solid white;
+}
+
+.bandeau-info {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #3d5a35;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  z-index: 500;
+  max-width: 80%;
+  text-align: center;
+}
+
+/* --- Barre de filtre étendue --- */
+.barre-filtre {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+}
+
+#recherche-filtre {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.puces-filtre {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+/* --- Panneau liste triable --- */
+.panneau-liste {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 88%;
+  max-width: 340px;
+  height: 100%;
+  background: white;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.2);
+  z-index: 600;
+  display: flex;
+  flex-direction: column;
+}
+
+.panneau-liste-entete {
+  padding: 14px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panneau-liste-entete select {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+}
+
+.panneau-liste-contenu {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.item-liste {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #f2f2f2;
+  cursor: pointer;
+}
+
+.item-liste:active {
+  background: #f6f6f6;
+}
+
+.item-liste-icone {
+  font-size: 22px;
+}
+
+.item-liste-texte {
+  flex: 1;
+}
+
+.item-liste-type {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.item-liste-details {
+  font-size: 12px;
+  color: #888;
+}
+
+/* --- Coordonnées & historique --- */
+.coordonnees-info {
+  font-size: 12px;
+  color: #888;
+  margin-top: 10px;
+  font-family: monospace;
+}
+
+.historique-info {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #777;
+  border-top: 1px dashed #eee;
+  padding-top: 10px;
+}
+
+.historique-entree {
+  margin-bottom: 4px;
+}
+
+/* --- Badge nombre de mises à jour, sur le marqueur --- */
+.badge-nb-maj {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #3d5a35;
+  color: white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  border: 1px solid white;
+}
+
+.marqueur-champi {
+  position: relative;
+  font-size: 22px;
+  text-align: center;
+  line-height: 28px;
+}
+
+/* --- Bouton "me localiser" façon contrôle Leaflet --- */
+.leaflet-control-localiser a {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  text-decoration: none;
 }

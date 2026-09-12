@@ -26,6 +26,8 @@
       </div>
 
       <form id="form-rejoindre" class="form-onglet">
+        <label for="pseudo-rejoindre">Ton prénom / pseudo</label>
+        <input type="text" id="pseudo-rejoindre" placeholder="Ex : Florian" required autocomplete="off">
         <label for="code-groupe">Code d'accès</label>
         <input type="text" id="code-groupe" placeholder="Ex : CEPE-4821" required autocomplete="off">
         <button type="submit">Rejoindre</button>
@@ -33,6 +35,8 @@
       </form>
 
       <form id="form-creer" class="form-onglet cache">
+        <label for="pseudo-creer">Ton prénom / pseudo</label>
+        <input type="text" id="pseudo-creer" placeholder="Ex : Florian" required autocomplete="off">
         <label for="nom-groupe">Nom du groupe</label>
         <input type="text" id="nom-groupe" placeholder="Ex : Famille Dupont" required autocomplete="off">
         <button type="submit">Créer le groupe</button>
@@ -46,19 +50,49 @@
     <header class="entete">
       <div>
         <strong id="nom-groupe-actif"></strong>
+        <button id="btn-renommer-groupe" class="btn-lien" title="Renommer le groupe">✏️</button>
         <span id="statut-connexion" class="statut">en ligne</span>
+        <div class="code-groupe">Code : <span id="code-groupe-actif"></span></div>
       </div>
       <div class="entete-actions">
-        <button id="btn-filtre" class="btn-icone" title="Filtrer par type">▽</button>
+        <button id="btn-liste" class="btn-icone" title="Liste des points">☰</button>
+        <button id="btn-filtre" class="btn-icone" title="Filtrer">▽</button>
         <button id="btn-quitter-groupe" class="btn-icone" title="Changer de groupe">⇄</button>
       </div>
     </header>
 
-    <div id="barre-filtre" class="barre-filtre cache"></div>
+    <div id="barre-filtre" class="barre-filtre cache">
+      <input type="text" id="recherche-filtre" placeholder="Rechercher un type...">
+      <div id="puces-filtre" class="puces-filtre"></div>
+    </div>
 
     <div id="carte"></div>
 
-    <button id="btn-localiser" class="btn-flottant" title="Me localiser et ajouter un point">📍</button>
+    <!-- Panneau flottant : liste triable des points -->
+    <div id="panneau-liste" class="panneau-liste cache">
+      <div class="panneau-liste-entete">
+        <strong>Points affichés</strong>
+        <select id="tri-liste">
+          <option value="proximite">Du plus proche</option>
+          <option value="recent">Du plus récent</option>
+          <option value="ancien">Du plus ancien</option>
+          <option value="alpha">Alphabétique</option>
+        </select>
+      </div>
+      <div id="contenu-liste" class="panneau-liste-contenu"></div>
+    </div>
+
+    <!-- Boutons d'action flottants -->
+    <div class="pile-boutons-flottants">
+      <button id="btn-importer-gpx" class="btn-flottant-secondaire" title="Importer un fichier GPX">📂</button>
+      <button id="btn-placement-manuel" class="btn-flottant-secondaire" title="Placer un point manuellement sur la carte">✛</button>
+      <button id="btn-localiser" class="btn-flottant" title="Me localiser et ajouter un point">
+        <span class="icone-champi-plus">🍄<span class="badge-plus">+</span></span>
+      </button>
+    </div>
+    <input type="file" id="fichier-gpx" accept=".gpx" class="cache">
+
+    <div id="bandeau-placement-manuel" class="bandeau-info cache">Touche la carte à l'endroit du coin à enregistrer</div>
 
     <div id="compteur-attente" class="badge-attente cache">0 point(s) en attente de synchro</div>
   </div>
@@ -70,13 +104,52 @@
       <form id="form-champignon">
         <input type="hidden" id="id-champignon-edite">
         <label for="type-champignon">Type de champignon</label>
-        <input type="text" id="type-champignon" placeholder="Ex : Cèpe de Bordeaux" required autocomplete="off">
+        <select id="type-champignon" required>
+          <option value="" disabled selected>Choisis un type</option>
+          <option>Cèpe de Bordeaux</option>
+          <option>Cèpe d'été (tête de nègre)</option>
+          <option>Cèpe bronzé</option>
+          <option>Girolle (chanterelle)</option>
+          <option>Chanterelle en tube (trompette jaune)</option>
+          <option>Trompette de la mort</option>
+          <option>Pied de mouton</option>
+          <option>Morille</option>
+          <option>Coulemelle (lépiote élevée)</option>
+          <option>Rosé des prés (agaric champêtre)</option>
+          <option>Pleurote en huître</option>
+          <option>Bolet bai</option>
+          <option>Bolet orangé (bolet des bouleaux)</option>
+          <option>Amanite des Césars (oronge)</option>
+          <option>Russule charbonnière</option>
+          <option>Lactaire délicieux</option>
+          <option>Mousseron (tricholome de la Saint-Georges)</option>
+          <option>Marasme des Oréades (faux mousseron)</option>
+          <option>Vesse-de-loup géante</option>
+          <option>Clavaire dorée</option>
+          <option value="autre">Autre (à préciser)</option>
+        </select>
+        <input type="text" id="type-champignon-autre" class="cache" placeholder="Précise le type de champignon">
+
+        <label>Icône</label>
+        <input type="hidden" id="icone-champignon" value="🍄">
+        <div id="selecteur-icones" class="selecteur-icones">
+          <button type="button" class="puce-icone actif" data-icone="🍄">🍄</button>
+          <button type="button" class="puce-icone" data-icone="🟠">🟠</button>
+          <button type="button" class="puce-icone" data-icone="🔴">🔴</button>
+          <button type="button" class="puce-icone" data-icone="🟡">🟡</button>
+          <button type="button" class="puce-icone" data-icone="🟣">🟣</button>
+          <button type="button" class="puce-icone" data-icone="⚪">⚪</button>
+          <button type="button" class="puce-icone" data-icone="⭐">⭐</button>
+          <button type="button" class="puce-icone" data-icone="❌">❌</button>
+        </div>
 
         <label for="date-trouvee">Date</label>
         <input type="date" id="date-trouvee" required>
 
         <label for="notes-champignon">Notes (optionnel)</label>
         <textarea id="notes-champignon" placeholder="Sous les chênes, versant nord..."></textarea>
+
+        <p id="coordonnees-ajout" class="coordonnees-info"></p>
 
         <div class="modal-actions">
           <button type="button" id="btn-annuler-ajout" class="btn-secondaire">Annuler</button>
@@ -92,6 +165,8 @@
       <h2 id="detail-type"></h2>
       <p id="detail-date" class="detail-date"></p>
       <p id="detail-notes"></p>
+      <p id="detail-coordonnees" class="coordonnees-info"></p>
+      <div id="detail-historique" class="historique-info"></div>
       <div class="modal-actions">
         <button type="button" id="btn-supprimer-point" class="btn-danger">Supprimer</button>
         <button type="button" id="btn-modifier-point" class="btn-secondaire">Modifier</button>

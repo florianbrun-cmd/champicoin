@@ -1,7 +1,8 @@
 // app.js
-// Logique principale de Champicoin : carte, géolocalisation, ajout/synchro des points.
+// Logique principale de Champicoin : carte, géolocalisation, ajout/synchro des points,
+// import GPX, filtre avancé, liste triable, historique des modifications.
 
-const API_BASE = '/api'; // le backend et le frontend sont servis par la même origine
+const API_BASE = '/api';
 
 // --- Éléments du DOM ---
 const ecranGroupe = document.getElementById('ecran-groupe');
@@ -12,15 +13,43 @@ const compteurAttente = document.getElementById('compteur-attente');
 
 let carte;
 let coucheMarqueurs;
+let marqueurPosition = null; // le repère "ma position" en temps réel
 let groupeCourant = null; // { name, code }
-let positionTemporaire = null; // dernier point localisé, en attente d'un formulaire
-let tousLesPoints = []; // { point, enAttente } — tous les points chargés, avant filtrage
-let typeFiltreActif = null; // null = pas de filtre (tout afficher)
+let positionTemporaire = null; // { lat, lng, accuracy, manuel } en attente d'un formulaire
+let tousLesPoints = []; // { point, enAttente } — tous les points chargés
+let typesFiltreActifs = new Set(); // types sélectionnés dans le filtre (vide = tous)
+let modeAjoutManuel = false;
+
 const btnFiltre = document.getElementById('btn-filtre');
 const barreFiltre = document.getElementById('barre-filtre');
+const pucesFiltre = document.getElementById('puces-filtre');
+const rechercheFiltre = document.getElementById('recherche-filtre');
+const btnListe = document.getElementById('btn-liste');
+const panneauListe = document.getElementById('panneau-liste');
+const contenuListe = document.getElementById('contenu-liste');
+const triListe = document.getElementById('tri-liste');
 
 // ==================================================
-// 1. GESTION DU GROUPE (connexion / création)
+// 0. PSEUDO (identité affichée dans l'historique)
+// ==================================================
+
+function getPseudo() {
+  return localStorage.getItem('champicoin_pseudo') || '';
+}
+
+function setPseudo(pseudo) {
+  localStorage.setItem('champicoin_pseudo', pseudo.trim());
+}
+
+// Pré-remplir les champs pseudo si déjà connu
+const pseudoConnu = getPseudo();
+if (pseudoConnu) {
+  document.getElementById('pseudo-rejoindre').value = pseudoConnu;
+  document.getElementById('pseudo-creer').value = pseudoConnu;
+}
+
+// ==================================================
+// 1. GESTION DU GROUPE (connexion / création / renommage)
 // ==================================================
 
 document.querySelectorAll('.onglet').forEach(bouton => {
@@ -36,6 +65,7 @@ document.querySelectorAll('.onglet').forEach(bouton => {
 document.getElementById('form-rejoindre').addEventListener('submit', async (e) => {
   e.preventDefault();
   const code = document.getElementById('code-groupe').value.trim();
+  const pseudo = document.getElementById('pseudo-rejoindre').value.trim();
   const erreurEl = document.getElementById('erreur-rejoindre');
   erreurEl.textContent = '';
 
@@ -50,6 +80,7 @@ document.getElementById('form-rejoindre').addEventListener('submit', async (e) =
       erreurEl.textContent = data.error || 'Erreur de connexion.';
       return;
     }
+    setPseudo(pseudo);
     entrerDansGroupe(data.group);
   } catch (err) {
     erreurEl.textContent = 'Pas de connexion internet. Réessaie une fois en ligne.';
@@ -59,6 +90,7 @@ document.getElementById('form-rejoindre').addEventListener('submit', async (e) =
 document.getElementById('form-creer').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = document.getElementById('nom-groupe').value.trim();
+  const pseudo = document.getElementById('pseudo-creer').value.trim();
   const erreurEl = document.getElementById('erreur-creer');
   erreurEl.textContent = '';
 
@@ -73,6 +105,7 @@ document.getElementById('form-creer').addEventListener('submit', async (e) => {
       erreurEl.textContent = data.error || 'Erreur de création.';
       return;
     }
+    setPseudo(pseudo);
     alert(`Groupe créé ! Voici le code à partager : ${data.group.code}`);
     entrerDansGroupe(data.group);
   } catch (err) {
@@ -84,6 +117,7 @@ function entrerDansGroupe(groupe) {
   groupeCourant = groupe;
   localStorage.setItem('champicoin_groupe', JSON.stringify(groupe));
   nomGroupeActif.textContent = groupe.name;
+  document.getElementById('code-groupe-actif').textContent = groupe.code;
   ecranGroupe.classList.add('cache');
   ecranCarte.classList.remove('cache');
   initCarte();
@@ -97,6 +131,34 @@ document.getElementById('btn-quitter-groupe').addEventListener('click', () => {
     groupeCourant = null;
     ecranCarte.classList.add('cache');
     ecranGroupe.classList.remove('cache');
+  }
+});
+
+document.getElementById('btn-renommer-groupe').addEventListener('click', async () => {
+  const nouveauNom = prompt('Nouveau nom du groupe :', groupeCourant.name);
+  if (!nouveauNom || !nouveauNom.trim() || nouveauNom.trim() === groupeCourant.name) return;
+
+  if (!navigator.onLine) {
+    alert('Renommer un groupe nécessite une connexion internet.');
+    return;
+  }
+
+  try {
+    const reponse = await fetch(`${API_BASE}/groups/rename`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: groupeCourant.code, name: nouveauNom.trim() })
+    });
+    const data = await reponse.json();
+    if (!reponse.ok) {
+      alert(data.error || 'Impossible de renommer le groupe.');
+      return;
+    }
+    groupeCourant = data.group;
+    localStorage.setItem('champicoin_groupe', JSON.stringify(groupeCourant));
+    nomGroupeActif.textContent = groupeCourant.name;
+  } catch (err) {
+    alert('Erreur réseau, réessaie plus tard.');
   }
 });
 
@@ -122,10 +184,68 @@ function initCarte() {
       () => {} // silencieux si refusé, on garde la vue par défaut
     );
   }
+
+  demarrerSuiviPosition();
+  ajouterControleLocalisation();
+
+  // Mode "placement manuel" : un clic sur la carte ouvre le formulaire à cet endroit
+  carte.on('click', (e) => {
+    if (!modeAjoutManuel) return;
+    positionTemporaire = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: null, manuel: true };
+    desactiverModeAjoutManuel();
+    ouvrirModalAjout();
+  });
+}
+
+// Suit la position de l'utilisateur en continu et affiche un repère "ma position"
+function demarrerSuiviPosition() {
+  if (!navigator.geolocation) return;
+
+  navigator.geolocation.watchPosition(
+    (pos) => {
+      const latlng = [pos.coords.latitude, pos.coords.longitude];
+      if (!marqueurPosition) {
+        const icone = L.divIcon({ className: 'marqueur-ma-position', iconSize: [18, 18] });
+        marqueurPosition = L.marker(latlng, { icon: icone, zIndexOffset: 1000 }).addTo(carte);
+      } else {
+        marqueurPosition.setLatLng(latlng);
+      }
+    },
+    (err) => console.warn('Suivi de position indisponible :', err.message),
+    { enableHighAccuracy: true, maximumAge: 5000 }
+  );
+}
+
+// Bouton "me centrer sur ma position", ajouté sous le zoom +/-
+function ajouterControleLocalisation() {
+  const ControleLocalisation = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function () {
+      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-localiser');
+      const lien = L.DomUtil.create('a', '', div);
+      lien.href = '#';
+      lien.title = 'Me centrer sur ma position';
+      lien.innerHTML = '🎯';
+      L.DomEvent.on(lien, 'click', L.DomEvent.stopPropagation);
+      L.DomEvent.on(lien, 'click', L.DomEvent.preventDefault);
+      L.DomEvent.on(lien, 'click', () => {
+        if (marqueurPosition) {
+          carte.setView(marqueurPosition.getLatLng(), 16);
+        } else if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => carte.setView([pos.coords.latitude, pos.coords.longitude], 16),
+            () => alert('Impossible de récupérer ta position.')
+          );
+        }
+      });
+      return div;
+    }
+  });
+  carte.addControl(new ControleLocalisation());
 }
 
 // ==================================================
-// 3. GÉOLOCALISATION + AJOUT D'UN POINT
+// 3. AJOUT D'UN POINT (géolocalisation, manuel, GPX)
 // ==================================================
 
 document.getElementById('btn-localiser').addEventListener('click', () => {
@@ -135,39 +255,174 @@ document.getElementById('btn-localiser').addEventListener('click', () => {
   }
 
   const bouton = document.getElementById('btn-localiser');
-  bouton.textContent = '⏳';
+  bouton.style.opacity = '0.6';
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      bouton.textContent = '📍';
-      positionTemporaire = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      bouton.style.opacity = '1';
+      positionTemporaire = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy,
+        manuel: false
+      };
       carte.setView([positionTemporaire.lat, positionTemporaire.lng], 16);
       ouvrirModalAjout();
     },
     (err) => {
-      bouton.textContent = '📍';
+      bouton.style.opacity = '1';
       alert('Impossible de récupérer ta position : ' + err.message);
     },
     { enableHighAccuracy: true, timeout: 15000 }
   );
 });
 
+// --- Placement manuel sur la carte ---
+const btnPlacementManuel = document.getElementById('btn-placement-manuel');
+const bandeauPlacementManuel = document.getElementById('bandeau-placement-manuel');
+
+btnPlacementManuel.addEventListener('click', () => {
+  modeAjoutManuel = !modeAjoutManuel;
+  btnPlacementManuel.classList.toggle('actif', modeAjoutManuel);
+  bandeauPlacementManuel.classList.toggle('cache', !modeAjoutManuel);
+});
+
+function desactiverModeAjoutManuel() {
+  modeAjoutManuel = false;
+  btnPlacementManuel.classList.remove('actif');
+  bandeauPlacementManuel.classList.add('cache');
+}
+
+// --- Import GPX ---
+document.getElementById('btn-importer-gpx').addEventListener('click', () => {
+  document.getElementById('fichier-gpx').click();
+});
+
+document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
+  const fichier = e.target.files[0];
+  if (!fichier) return;
+
+  try {
+    const texte = await fichier.text();
+    const xml = new DOMParser().parseFromString(texte, 'application/xml');
+    const waypoints = Array.from(xml.querySelectorAll('wpt'));
+
+    if (waypoints.length === 0) {
+      alert('Aucun point trouvé dans ce fichier GPX.');
+      return;
+    }
+
+    if (!confirm(`Importer ${waypoints.length} point(s) depuis ce fichier GPX ?`)) return;
+
+    for (const wpt of waypoints) {
+      const lat = parseFloat(wpt.getAttribute('lat'));
+      const lng = parseFloat(wpt.getAttribute('lon'));
+      if (isNaN(lat) || isNaN(lng)) continue;
+
+      const nomBalise = wpt.querySelector('name')?.textContent?.trim();
+      const dateBalise = wpt.querySelector('time')?.textContent?.trim();
+
+      const nouveauPoint = {
+        lat,
+        lng,
+        accuracy: null,
+        mushroomType: nomBalise || 'Import GPX',
+        icon: '🍄',
+        dateFound: dateBalise ? dateBalise.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        notes: 'Importé depuis un fichier GPX',
+        createdBy: getPseudo(),
+        clientId: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2)
+      };
+
+      tousLesPoints.push({ point: nouveauPoint, enAttente: true });
+      await enregistrerPoint(nouveauPoint);
+    }
+
+    construireBarreFiltre();
+    rafraichirAffichageCarte();
+    alert('Import terminé !');
+  } catch (err) {
+    alert('Erreur lors de la lecture du fichier GPX.');
+  } finally {
+    e.target.value = '';
+  }
+});
+
+// --- Formulaire (ajout ou modification) ---
+
+document.getElementById('type-champignon').addEventListener('change', (e) => {
+  const champAutre = document.getElementById('type-champignon-autre');
+  if (e.target.value === 'autre') {
+    champAutre.classList.remove('cache');
+    champAutre.focus();
+  } else {
+    champAutre.classList.add('cache');
+    champAutre.value = '';
+  }
+});
+
+function selectionnerTypeChampignon(type) {
+  const selecteur = document.getElementById('type-champignon');
+  const champAutre = document.getElementById('type-champignon-autre');
+  const optionExiste = Array.from(selecteur.options).some(o => o.value === type);
+
+  if (optionExiste) {
+    selecteur.value = type;
+    champAutre.classList.add('cache');
+    champAutre.value = '';
+  } else {
+    selecteur.value = 'autre';
+    champAutre.classList.remove('cache');
+    champAutre.value = type;
+  }
+}
+
+document.querySelectorAll('.puce-icone').forEach(puce => {
+  puce.addEventListener('click', () => {
+    document.querySelectorAll('.puce-icone').forEach(p => p.classList.remove('actif'));
+    puce.classList.add('actif');
+    document.getElementById('icone-champignon').value = puce.dataset.icone;
+  });
+});
+
+function selectionnerIcone(icone) {
+  document.getElementById('icone-champignon').value = icone || '🍄';
+  document.querySelectorAll('.puce-icone').forEach(p => {
+    p.classList.toggle('actif', p.dataset.icone === (icone || '🍄'));
+  });
+}
+
+function texteCoordonnees(point) {
+  if (!point) return '';
+  const lat = point.lat.toFixed(5);
+  const lng = point.lng.toFixed(5);
+  if (point.accuracy) {
+    return `📍 ${lat}, ${lng} — précision ≈ ${Math.round(point.accuracy)} m`;
+  }
+  return `📍 ${lat}, ${lng} — position placée manuellement`;
+}
+
 function ouvrirModalAjout() {
   document.getElementById('titre-modal-ajout').textContent = 'Nouveau coin 🍄';
   document.getElementById('id-champignon-edite').value = '';
-  document.getElementById('type-champignon').value = '';
-  document.getElementById('notes-champignon').value = '';
   document.getElementById('date-trouvee').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('type-champignon').value = '';
+  document.getElementById('type-champignon-autre').classList.add('cache');
+  document.getElementById('type-champignon-autre').value = '';
+  document.getElementById('notes-champignon').value = '';
+  document.getElementById('coordonnees-ajout').textContent = texteCoordonnees(positionTemporaire);
+  selectionnerIcone('🍄');
   document.getElementById('modal-ajout').classList.remove('cache');
 }
 
 function ouvrirModalModification(point) {
   document.getElementById('titre-modal-ajout').textContent = 'Modifier le coin 🍄';
   document.getElementById('id-champignon-edite').value = point._id || '';
-  document.getElementById('type-champignon').value = point.mushroomType;
+  selectionnerTypeChampignon(point.mushroomType);
   document.getElementById('date-trouvee').value = point.dateFound;
   document.getElementById('notes-champignon').value = point.notes || '';
-  positionTemporaire = { lat: point.lat, lng: point.lng };
+  document.getElementById('coordonnees-ajout').textContent = texteCoordonnees(point);
+  selectionnerIcone(point.icon);
   document.getElementById('modal-detail').classList.add('cache');
   document.getElementById('modal-ajout').classList.remove('cache');
 }
@@ -182,10 +437,21 @@ document.getElementById('form-champignon').addEventListener('submit', async (e) 
   e.preventDefault();
 
   const idEdite = document.getElementById('id-champignon-edite').value;
+  const selecteurType = document.getElementById('type-champignon').value;
+  const typeFinal = selecteurType === 'autre'
+    ? document.getElementById('type-champignon-autre').value.trim()
+    : selecteurType;
+
+  if (!typeFinal) {
+    alert('Merci de préciser un type de champignon.');
+    return;
+  }
+
   const donneesFormulaire = {
-    mushroomType: document.getElementById('type-champignon').value.trim(),
+    mushroomType: typeFinal,
     dateFound: document.getElementById('date-trouvee').value,
-    notes: document.getElementById('notes-champignon').value.trim()
+    notes: document.getElementById('notes-champignon').value.trim(),
+    icon: document.getElementById('icone-champignon').value || '🍄'
   };
 
   document.getElementById('modal-ajout').classList.add('cache');
@@ -197,7 +463,9 @@ document.getElementById('form-champignon').addEventListener('submit', async (e) 
     const nouveauPoint = {
       lat: positionTemporaire.lat,
       lng: positionTemporaire.lng,
+      accuracy: positionTemporaire.accuracy,
       ...donneesFormulaire,
+      createdBy: getPseudo(),
       clientId: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2)
     };
     tousLesPoints.push({ point: nouveauPoint, enAttente: true });
@@ -218,7 +486,7 @@ async function modifierPoint(id, donnees) {
     const reponse = await fetch(`${API_BASE}/spots/${id}?groupCode=${encodeURIComponent(groupeCourant.code)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...donnees, groupCode: groupeCourant.code })
+      body: JSON.stringify({ ...donnees, groupCode: groupeCourant.code, author: getPseudo() })
     });
     if (!reponse.ok) throw new Error('Échec de la modification');
     chargerPoints();
@@ -241,11 +509,10 @@ async function enregistrerPoint(point) {
     const reponse = await fetch(`${API_BASE}/spots`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...point, groupCode: groupeCourant.code })
+      body: JSON.stringify({ ...point, groupCode: groupeCourant.code, author: getPseudo() })
     });
     if (!reponse.ok) throw new Error('Échec serveur');
   } catch (err) {
-    // Le réseau a lâché entre-temps : on met en attente
     ajouterAFileDAttente(point);
   }
 }
@@ -269,7 +536,7 @@ async function synchroniserPointsEnAttente() {
       const reponse = await fetch(`${API_BASE}/spots`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...point, groupCode: groupeCourant.code })
+        body: JSON.stringify({ ...point, groupCode: groupeCourant.code, author: point.createdBy || getPseudo() })
       });
       if (!reponse.ok) restants.push(point);
     } catch (err) {
@@ -279,7 +546,7 @@ async function synchroniserPointsEnAttente() {
 
   localStorage.setItem('champicoin_file_attente', JSON.stringify(restants));
   mettreAJourBadgeAttente();
-  if (restants.length === 0) chargerPoints(); // recharge pour avoir les vrais IDs serveur
+  if (restants.length === 0) chargerPoints();
 }
 
 function mettreAJourBadgeAttente() {
@@ -304,7 +571,7 @@ window.addEventListener('offline', () => {
 });
 
 // ==================================================
-// 5. AFFICHAGE DES POINTS SUR LA CARTE
+// 5. AFFICHAGE, FILTRE & LISTE TRIABLE DES POINTS
 // ==================================================
 
 async function chargerPoints() {
@@ -320,7 +587,6 @@ async function chargerPoints() {
     }
   }
 
-  // On affiche aussi les points encore en attente de synchro
   const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
   file.forEach(point => tousLesPoints.push({ point, enAttente: true }));
 
@@ -328,63 +594,71 @@ async function chargerPoints() {
   rafraichirAffichageCarte();
 }
 
+function calculerPointsFiltres() {
+  const recherche = rechercheFiltre.value.trim().toLowerCase();
+
+  return tousLesPoints.filter(({ point }) => {
+    if (typesFiltreActifs.size > 0 && !typesFiltreActifs.has(point.mushroomType)) return false;
+    if (recherche && !point.mushroomType.toLowerCase().includes(recherche)) return false;
+    return true;
+  });
+}
+
 function rafraichirAffichageCarte() {
   coucheMarqueurs.clearLayers();
-  const aAfficher = typeFiltreActif
-    ? tousLesPoints.filter(({ point }) => point.mushroomType === typeFiltreActif)
-    : tousLesPoints;
-
-  aAfficher.forEach(({ point, enAttente }) => ajouterMarqueur(point, enAttente));
+  calculerPointsFiltres().forEach(({ point, enAttente }) => ajouterMarqueur(point, enAttente));
+  if (!panneauListe.classList.contains('cache')) construireListe();
 }
 
 function ajouterMarqueur(point, enAttente) {
+  const nbVersions = (point.history && point.history.length > 0) ? point.history.length + 1 : 0;
+  const badge = nbVersions > 0 ? `<span class="badge-nb-maj">${nbVersions}</span>` : '';
+
   const icone = L.divIcon({
-    className: enAttente ? 'point-en-attente' : '',
-    html: '🍄',
+    className: (enAttente ? 'point-en-attente ' : '') + 'marqueur-champi',
+    html: `${point.icon || '🍄'}${badge}`,
     iconSize: [28, 28]
   });
 
   const marqueur = L.marker([point.lat, point.lng], { icon: icone }).addTo(coucheMarqueurs);
-
-  marqueur.on('click', () => {
-    afficherDetailPoint(point);
-  });
+  marqueur.on('click', () => afficherDetailPoint(point));
 }
 
-// --- Filtre par type de champignon ---
+// --- Filtre (recherche + multi-sélection de types) ---
 
 function construireBarreFiltre() {
   const typesUniques = [...new Set(tousLesPoints.map(({ point }) => point.mushroomType))].sort();
-
-  barreFiltre.innerHTML = '';
+  pucesFiltre.innerHTML = '';
 
   if (typesUniques.length === 0) return;
 
-  // Si le type actuellement filtré n'existe plus dans les points, on réinitialise
-  if (typeFiltreActif && !typesUniques.includes(typeFiltreActif)) {
-    typeFiltreActif = null;
-  }
+  // Retire du filtre les types qui n'existent plus
+  typesFiltreActifs.forEach(t => { if (!typesUniques.includes(t)) typesFiltreActifs.delete(t); });
 
   const puceTout = document.createElement('button');
-  puceTout.className = 'puce-filtre' + (typeFiltreActif === null ? ' actif' : '');
+  puceTout.className = 'puce-filtre' + (typesFiltreActifs.size === 0 ? ' actif' : '');
   puceTout.textContent = 'Tous';
   puceTout.addEventListener('click', () => {
-    typeFiltreActif = null;
+    typesFiltreActifs.clear();
     construireBarreFiltre();
     rafraichirAffichageCarte();
   });
-  barreFiltre.appendChild(puceTout);
+  pucesFiltre.appendChild(puceTout);
 
   typesUniques.forEach(type => {
     const puce = document.createElement('button');
-    puce.className = 'puce-filtre' + (typeFiltreActif === type ? ' actif' : '');
+    puce.className = 'puce-filtre' + (typesFiltreActifs.has(type) ? ' actif' : '');
     puce.textContent = type;
     puce.addEventListener('click', () => {
-      typeFiltreActif = type;
+      if (typesFiltreActifs.has(type)) {
+        typesFiltreActifs.delete(type);
+      } else {
+        typesFiltreActifs.add(type);
+      }
       construireBarreFiltre();
       rafraichirAffichageCarte();
     });
-    barreFiltre.appendChild(puce);
+    pucesFiltre.appendChild(puce);
   });
 }
 
@@ -393,10 +667,126 @@ btnFiltre.addEventListener('click', () => {
   btnFiltre.classList.toggle('actif');
 });
 
+rechercheFiltre.addEventListener('input', () => rafraichirAffichageCarte());
+
+// --- Panneau liste triable ---
+
+function distanceMetres(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (v) => (v * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function construireListe() {
+  const critere = triListe.value;
+  let points = calculerPointsFiltres().map(({ point }) => point);
+
+  const positionActuelle = marqueurPosition ? marqueurPosition.getLatLng() : null;
+
+  if (critere === 'proximite') {
+    if (!positionActuelle) {
+      contenuListe.innerHTML = '<p style="padding:16px;color:#888;">Position indisponible pour le tri par proximité.</p>';
+      return;
+    }
+    points.sort((a, b) =>
+      distanceMetres(positionActuelle.lat, positionActuelle.lng, a.lat, a.lng) -
+      distanceMetres(positionActuelle.lat, positionActuelle.lng, b.lat, b.lng)
+    );
+  } else if (critere === 'recent') {
+    points.sort((a, b) => new Date(b.dateFound) - new Date(a.dateFound));
+  } else if (critere === 'ancien') {
+    points.sort((a, b) => new Date(a.dateFound) - new Date(b.dateFound));
+  } else if (critere === 'alpha') {
+    points.sort((a, b) => a.mushroomType.localeCompare(b.mushroomType));
+  }
+
+  contenuListe.innerHTML = '';
+  if (points.length === 0) {
+    contenuListe.innerHTML = '<p style="padding:16px;color:#888;">Aucun point à afficher.</p>';
+    return;
+  }
+
+  points.forEach(point => {
+    const item = document.createElement('div');
+    item.className = 'item-liste';
+
+    let details = formaterDate(point.dateFound);
+    if (critere === 'proximite' && positionActuelle) {
+      const d = distanceMetres(positionActuelle.lat, positionActuelle.lng, point.lat, point.lng);
+      details += ' · ' + (d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`);
+    }
+
+    item.innerHTML = `
+      <div class="item-liste-icone">${point.icon || '🍄'}</div>
+      <div class="item-liste-texte">
+        <div class="item-liste-type">${point.mushroomType}</div>
+        <div class="item-liste-details">${details}</div>
+      </div>
+    `;
+    item.addEventListener('click', () => {
+      carte.setView([point.lat, point.lng], 17);
+      panneauListe.classList.add('cache');
+      afficherDetailPoint(point);
+    });
+    contenuListe.appendChild(item);
+  });
+}
+
+btnListe.addEventListener('click', () => {
+  panneauListe.classList.toggle('cache');
+  if (!panneauListe.classList.contains('cache')) construireListe();
+});
+
+triListe.addEventListener('change', construireListe);
+
+// ==================================================
+// 6. DÉTAIL D'UN POINT (coordonnées, historique, actions)
+// ==================================================
+
+function formaterDate(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function formaterDateHeure(dateStr) {
+  if (!dateStr) return 'date inconnue';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) +
+    ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
 function afficherDetailPoint(point) {
-  document.getElementById('detail-type').textContent = point.mushroomType;
+  document.getElementById('detail-type').textContent = `${point.icon || '🍄'} ${point.mushroomType}`;
   document.getElementById('detail-date').textContent = formaterDate(point.dateFound);
   document.getElementById('detail-notes').textContent = point.notes || '';
+  document.getElementById('detail-coordonnees').textContent = texteCoordonnees(point);
+
+  const zoneHistorique = document.getElementById('detail-historique');
+  zoneHistorique.innerHTML = '';
+
+  if (point.createdAt) {
+    const ligneCreation = document.createElement('div');
+    ligneCreation.className = 'historique-entree';
+    ligneCreation.textContent = `Créé le ${formaterDateHeure(point.createdAt)} par ${point.createdBy || 'inconnu'}`;
+    zoneHistorique.appendChild(ligneCreation);
+  }
+
+  if (point.updatedAt && point.updatedAt !== point.createdAt) {
+    const ligneModif = document.createElement('div');
+    ligneModif.className = 'historique-entree';
+    ligneModif.textContent = `Modifié le ${formaterDateHeure(point.updatedAt)} par ${point.updatedBy || 'inconnu'}`;
+    zoneHistorique.appendChild(ligneModif);
+  }
+
+  if (point.history && point.history.length > 0) {
+    const ligneCompteur = document.createElement('div');
+    ligneCompteur.className = 'historique-entree';
+    ligneCompteur.textContent = `📜 ${point.history.length} version(s) précédente(s) de ce point`;
+    zoneHistorique.appendChild(ligneCompteur);
+  }
 
   const btnSupprimer = document.getElementById('btn-supprimer-point');
   btnSupprimer.onclick = async () => {
@@ -427,16 +817,10 @@ document.getElementById('btn-fermer-detail').addEventListener('click', () => {
   document.getElementById('modal-detail').classList.add('cache');
 });
 
-function formaterDate(dateStr) {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-}
-
 // ==================================================
-// 6. DÉMARRAGE DE L'APPLICATION
+// 7. DÉMARRAGE DE L'APPLICATION
 // ==================================================
 
-// Reprendre le groupe déjà enregistré localement, si présent
 const groupeSauvegarde = localStorage.getItem('champicoin_groupe');
 if (groupeSauvegarde) {
   entrerDansGroupe(JSON.parse(groupeSauvegarde));
@@ -449,7 +833,6 @@ if (!navigator.onLine) {
   statutConnexion.classList.add('hors-ligne');
 }
 
-// Enregistrement du Service Worker (mode hors-ligne)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('service-worker.js');
