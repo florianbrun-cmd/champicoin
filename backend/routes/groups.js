@@ -56,4 +56,27 @@ router.post('/join', async (req, res) => {
   }
 });
 
+// Renommer un groupe existant
+router.put('/rename', async (req, res) => {
+  try {
+    const { code, name } = req.body;
+    if (!code || !name || !name.trim()) {
+      return res.status(400).json({ error: 'Code et nouveau nom requis.' });
+    }
+
+    const groupe = await Group.findOneAndUpdate(
+      { code: code.trim().toUpperCase() },
+      { name: name.trim() },
+      { new: true }
+    );
+
+    if (!groupe) return res.status(404).json({ error: 'Groupe introuvable.' });
+
+    res.json({ group: groupe });
+  } catch (erreur) {
+    console.error(erreur);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
 module.exports = router;

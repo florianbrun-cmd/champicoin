@@ -1,5 +1,5 @@
 // routes/spots.js
-// Gestion des points (coins à champignons) : création, liste, suppression.
+// Gestion des points (coins à champignons) : création, liste, modification (avec historique), suppression.
 // Chaque point est rattaché à un groupCode : seuls les membres du groupe le voient.
 
 const express = require('express');
@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
 // Ajouter un nouveau point
 router.post('/', async (req, res) => {
   try {
-    const { groupCode, lat, lng, mushroomType, dateFound, notes, clientId } = req.body;
+    const { groupCode, lat, lng, accuracy, mushroomType, icon, dateFound, notes, clientId, author } = req.body;
     const groupe = await verifierGroupe(groupCode);
     if (!groupe) return res.status(403).json({ error: 'Code de groupe invalide.' });
 
@@ -38,14 +38,21 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Position et type de champignon requis.' });
     }
 
+    const maintenant = new Date();
+
     const spot = await Spot.create({
       groupCode: groupe.code,
       lat,
       lng,
+      accuracy: (accuracy === undefined || accuracy === null) ? null : accuracy,
       mushroomType,
-      dateFound: dateFound || new Date().toISOString().slice(0, 10),
+      icon: icon || '🍄',
+      dateFound: dateFound || maintenant.toISOString().slice(0, 10),
       notes: notes || '',
-      clientId: clientId || null
+      clientId: clientId || null,
+      createdBy: author || '',
+      updatedBy: author || '',
+      updatedAt: maintenant
     });
 
     res.json({ spot });
@@ -55,10 +62,10 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Modifier un point existant
+// Modifier un point existant : conserve l'ancienne version dans l'historique
 router.put('/:id', async (req, res) => {
   try {
-    const { groupCode, lat, lng, mushroomType, dateFound, notes } = req.body;
+    const { groupCode, lat, lng, mushroomType, icon, dateFound, notes, author } = req.body;
     const groupe = await verifierGroupe(groupCode);
     if (!groupe) return res.status(403).json({ error: 'Code de groupe invalide.' });
 
@@ -66,8 +73,31 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Le type de champignon est requis.' });
     }
 
-    const misAJour = { mushroomType, dateFound, notes: notes || '' };
-    // On permet aussi d'ajuster la position, si fournie
+    const spotExistant = await Spot.findOne({ _id: req.params.id, groupCode: groupe.code });
+    if (!spotExistant) return res.status(404).json({ error: 'Point introuvable.' });
+
+    // On archive l'état précédent dans l'historique avant d'écraser
+    const ancienneVersion = {
+      mushroomType: spotExistant.mushroomType,
+      icon: spotExistant.icon,
+      dateFound: spotExistant.dateFound,
+      notes: spotExistant.notes,
+      updatedBy: spotExistant.updatedBy,
+      updatedAt: spotExistant.updatedAt
+    };
+
+    const maintenant = new Date();
+    const misAJour = {
+      mushroomType,
+      dateFound,
+      notes: notes || '',
+      icon: icon || '🍄',
+      updatedBy: author || '',
+      updatedAt: maintenant,
+      $push: undefined // placeholder, remplacé ci-dessous via updateOne
+    };
+    delete misAJour.$push;
+
     if (lat !== undefined && lng !== undefined) {
       misAJour.lat = lat;
       misAJour.lng = lng;
@@ -75,11 +105,9 @@ router.put('/:id', async (req, res) => {
 
     const spot = await Spot.findOneAndUpdate(
       { _id: req.params.id, groupCode: groupe.code },
-      misAJour,
+      { $set: misAJour, $push: { history: ancienneVersion } },
       { new: true }
     );
-
-    if (!spot) return res.status(404).json({ error: 'Point introuvable.' });
 
     res.json({ spot });
   } catch (erreur) {
