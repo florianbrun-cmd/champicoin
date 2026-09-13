@@ -296,6 +296,10 @@ function initCarte() {
 
   carte.on('click', (e) => {
     if (modeAjoutManuel) {
+      if (carte.getZoom() < ZOOM_MIN_PLACEMENT_MANUEL) {
+        alert('Zoome davantage pour placer ce point avec précision.');
+        return;
+      }
       positionTemporaire = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: null, manuel: true };
       desactiverModeAjoutManuel();
       ouvrirModalAjout();
@@ -443,11 +447,17 @@ document.getElementById('btn-localiser').addEventListener('click', () => {
 const btnPlacementManuel = document.getElementById('btn-placement-manuel');
 const bandeauPlacementManuel = document.getElementById('bandeau-placement-manuel');
 
+const ZOOM_MIN_PLACEMENT_MANUEL = 17;
+
 btnPlacementManuel.addEventListener('click', () => {
   modeAjoutManuel = !modeAjoutManuel;
   btnPlacementManuel.classList.toggle('actif', modeAjoutManuel);
   bandeauPlacementManuel.classList.toggle('cache', !modeAjoutManuel);
   document.getElementById('carte').classList.toggle('mode-placement-actif', modeAjoutManuel);
+
+  if (modeAjoutManuel && carte.getZoom() < ZOOM_MIN_PLACEMENT_MANUEL) {
+    carte.setZoom(ZOOM_MIN_PLACEMENT_MANUEL);
+  }
 });
 
 function desactiverModeAjoutManuel() {
@@ -824,34 +834,44 @@ function ajouterMarqueurZone(zone) {
 }
 
 function afficherZone(zone) {
-  // Fusionne les coins du même type au sein de la zone, pour ne pas répéter des lignes identiques
+  // Regroupe les coins du même type au sein de la zone, mais liste chaque coordonnée
+  // individuellement : le marqueur de zone est une MOYENNE des positions, pas la position
+  // réelle d'un point précis — la liste ci-dessous permet de vérifier chaque coordonnée exacte.
   const parType = {};
   zone.forEach(z => { (parType[z.point.mushroomType] = parType[z.point.mushroomType] || []).push(z); });
+  const groupesTries = Object.values(parType);
 
   const contenu = document.getElementById('contenu-zone');
   contenu.innerHTML = Object.entries(parType).map(([type, entrees], idxGroupe) => {
     const suffixe = entrees.length > 1 ? ` (×${entrees.length})` : '';
-    const datesTriees = [...entrees].sort((a, b) => new Date(b.point.dateFound) - new Date(a.point.dateFound));
-    return `
-      <div class="item-zone" data-groupe="${idxGroupe}" data-sous-index="0">
-        ${htmlIcone(type)}
-        <div class="item-liste-texte">
-          <div class="item-liste-type">${type}${suffixe}</div>
-          <div class="item-liste-details">${entrees.length > 1 ? 'plusieurs dates — voir le détail' : formaterDate(datesTriees[0].point.dateFound)}</div>
+    const entreesTriees = [...entrees].sort((a, b) => new Date(b.point.dateFound) - new Date(a.point.dateFound));
+    const lignes = entreesTriees.map((e) => {
+      const sousIndex = entrees.indexOf(e);
+      return `
+        <div class="item-zone-sous" data-groupe="${idxGroupe}" data-sous="${sousIndex}">
+          <span>${formaterDate(e.point.dateFound)}</span>
+          <span class="item-zone-sous-coord">${formaterCoordDMM(e.point.lat, e.point.lng)}</span>
         </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="groupe-zone">
+        <div class="item-zone">
+          ${htmlIcone(type)}
+          <div class="item-liste-texte"><div class="item-liste-type">${type}${suffixe}</div></div>
+        </div>
+        <div class="liste-coords-zone">${lignes}</div>
       </div>
     `;
   }).join('');
 
-  const groupesTries = Object.values(parType);
-  contenu.querySelectorAll('.item-zone').forEach(el => {
+  contenu.querySelectorAll('.item-zone-sous').forEach(el => {
     el.addEventListener('click', () => {
       const entrees = groupesTries[parseInt(el.dataset.groupe, 10)];
+      const point = entrees[parseInt(el.dataset.sous, 10)].point;
       document.getElementById('modal-zone').classList.add('cache');
-      // On ouvre le plus récent des points de ce type ; l'historique complet reste
-      // consultable depuis la fenêtre de détail de chaque point.
-      const plusRecent = [...entrees].sort((a, b) => new Date(b.point.dateFound) - new Date(a.point.dateFound))[0];
-      afficherDetailPoint(plusRecent.point);
+      afficherDetailPoint(point);
     });
   });
   document.getElementById('modal-zone').classList.remove('cache');
