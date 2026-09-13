@@ -88,7 +88,6 @@
       <div class="panneau-liste-entete">
         <div class="panneau-liste-ligne-titre">
           <strong>Points affichés</strong>
-          <button id="btn-fermer-liste" class="btn-fermer-panneau" title="Fermer">✕</button>
         </div>
         <select id="tri-liste">
           <option value="proximite">Du plus proche</option>
@@ -177,7 +176,18 @@
         <button type="button" id="btn-supprimer-point" class="btn-danger">Supprimer</button>
         <button type="button" id="btn-modifier-point" class="btn-secondaire">Modifier</button>
         <button type="button" id="btn-itineraire-point" class="btn-secondaire">🧭 Itinéraire</button>
-        <button type="button" id="btn-fermer-detail" class="btn-principal">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Choix de l'application de navigation -->
+  <div id="modal-itineraire" class="modal cache">
+    <div class="modal-contenu">
+      <h2>Se rendre sur ce coin</h2>
+      <div class="choix-navigation">
+        <button type="button" class="btn-app-navigation" data-app="google">🗺️ Google Maps</button>
+        <button type="button" class="btn-app-navigation" data-app="apple">🍎 Plans (Apple)</button>
+        <button type="button" class="btn-app-navigation" data-app="waze">🚗 Waze</button>
       </div>
     </div>
   </div>
@@ -187,9 +197,6 @@
     <div class="modal-contenu">
       <h2>📍 Coins de cette zone</h2>
       <div id="contenu-zone"></div>
-      <div class="modal-actions">
-        <button type="button" id="btn-fermer-zone" class="btn-principal">Fermer</button>
-      </div>
     </div>
   </div>
 
@@ -199,9 +206,6 @@
       <h2>👥 Membres du groupe</h2>
       <p class="note-membres">Toute personne ayant le code du groupe peut voir cette liste.</p>
       <div id="contenu-membres"></div>
-      <div class="modal-actions">
-        <button type="button" id="btn-fermer-membres" class="btn-principal">Fermer</button>
-      </div>
     </div>
   </div>
 

@@ -259,9 +259,6 @@ document.getElementById('btn-membres').addEventListener('click', async () => {
     zone.innerHTML = '<p style="color:#888;">Erreur de chargement.</p>';
   }
 });
-document.getElementById('btn-fermer-membres').addEventListener('click', () => {
-  document.getElementById('modal-membres').classList.add('cache');
-});
 
 // ==================================================
 // 2. CARTE
@@ -450,12 +447,14 @@ btnPlacementManuel.addEventListener('click', () => {
   modeAjoutManuel = !modeAjoutManuel;
   btnPlacementManuel.classList.toggle('actif', modeAjoutManuel);
   bandeauPlacementManuel.classList.toggle('cache', !modeAjoutManuel);
+  document.getElementById('carte').classList.toggle('mode-placement-actif', modeAjoutManuel);
 });
 
 function desactiverModeAjoutManuel() {
   modeAjoutManuel = false;
   btnPlacementManuel.classList.remove('actif');
   bandeauPlacementManuel.classList.add('cache');
+  document.getElementById('carte').classList.remove('mode-placement-actif');
 }
 
 document.getElementById('btn-importer-gpx').addEventListener('click', () => {
@@ -775,6 +774,14 @@ function filtresActifs() {
     rechercheFiltre.value.trim() !== '';
 }
 
+function ajusterVueAuxPointsFiltres() {
+  const pointsFiltres = calculerPointsFiltres();
+  if (filtresActifs() && pointsFiltres.length > 0) {
+    const bounds = L.latLngBounds(pointsFiltres.map(({ point }) => [point.lat, point.lng]));
+    carte.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
+  }
+}
+
 function rafraichirAffichageCarte() {
   coucheMarqueurs.clearLayers();
   const pointsFiltres = calculerPointsFiltres();
@@ -786,11 +793,6 @@ function rafraichirAffichageCarte() {
       ajouterMarqueurZone(zone);
     }
   });
-
-  if (filtresActifs() && pointsFiltres.length > 0) {
-    const bounds = L.latLngBounds(pointsFiltres.map(({ point }) => [point.lat, point.lng]));
-    carte.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
-  }
 
   if (!panneauListe.classList.contains('cache')) construireListe();
 }
@@ -854,9 +856,6 @@ function afficherZone(zone) {
   });
   document.getElementById('modal-zone').classList.remove('cache');
 }
-document.getElementById('btn-fermer-zone').addEventListener('click', () => {
-  document.getElementById('modal-zone').classList.add('cache');
-});
 
 // --- Filtres : type, mois, département ---
 
@@ -875,7 +874,7 @@ function construireFiltreTypes() {
   const puceTout = document.createElement('button');
   puceTout.className = 'puce-filtre' + (typesFiltreActifs.size === 0 ? ' actif' : '');
   puceTout.textContent = 'Tous';
-  puceTout.addEventListener('click', () => { typesFiltreActifs.clear(); construireFiltreTypes(); rafraichirAffichageCarte(); });
+  puceTout.addEventListener('click', () => { typesFiltreActifs.clear(); construireFiltreTypes(); rafraichirAffichageCarte(); ajusterVueAuxPointsFiltres(); });
   pucesFiltre.appendChild(puceTout);
 
   typesUniques.forEach(type => {
@@ -886,6 +885,7 @@ function construireFiltreTypes() {
       if (typesFiltreActifs.has(type)) typesFiltreActifs.delete(type); else typesFiltreActifs.add(type);
       construireFiltreTypes();
       rafraichirAffichageCarte();
+      ajusterVueAuxPointsFiltres();
     });
     pucesFiltre.appendChild(puce);
   });
@@ -900,7 +900,7 @@ function construireFiltreMois() {
   const puceTout = document.createElement('button');
   puceTout.className = 'puce-filtre' + (moisFiltreActifs.size === 0 ? ' actif' : '');
   puceTout.textContent = 'Tous';
-  puceTout.addEventListener('click', () => { moisFiltreActifs.clear(); construireFiltreMois(); rafraichirAffichageCarte(); });
+  puceTout.addEventListener('click', () => { moisFiltreActifs.clear(); construireFiltreMois(); rafraichirAffichageCarte(); ajusterVueAuxPointsFiltres(); });
   pucesFiltreMois.appendChild(puceTout);
 
   moisPresents.forEach(m => {
@@ -911,6 +911,7 @@ function construireFiltreMois() {
       if (moisFiltreActifs.has(m)) moisFiltreActifs.delete(m); else moisFiltreActifs.add(m);
       construireFiltreMois();
       rafraichirAffichageCarte();
+      ajusterVueAuxPointsFiltres();
     });
     pucesFiltreMois.appendChild(puce);
   });
@@ -950,7 +951,7 @@ function construireFiltreDepartements() {
   const puceTout = document.createElement('button');
   puceTout.className = 'puce-filtre' + (departementsFiltreActifs.size === 0 ? ' actif' : '');
   puceTout.textContent = 'Tous';
-  puceTout.addEventListener('click', () => { departementsFiltreActifs.clear(); construireFiltreDepartements(); rafraichirAffichageCarte(); });
+  puceTout.addEventListener('click', () => { departementsFiltreActifs.clear(); construireFiltreDepartements(); rafraichirAffichageCarte(); ajusterVueAuxPointsFiltres(); });
   pucesFiltreDepartement.appendChild(puceTout);
 
   deptsPresents.forEach(dept => {
@@ -961,6 +962,7 @@ function construireFiltreDepartements() {
       if (departementsFiltreActifs.has(dept)) departementsFiltreActifs.delete(dept); else departementsFiltreActifs.add(dept);
       construireFiltreDepartements();
       rafraichirAffichageCarte();
+      ajusterVueAuxPointsFiltres();
     });
     pucesFiltreDepartement.appendChild(puce);
   });
@@ -991,7 +993,7 @@ btnFiltre.addEventListener('click', () => {
   barreFiltre.classList.toggle('cache');
   btnFiltre.classList.toggle('actif');
 });
-rechercheFiltre.addEventListener('input', () => rafraichirAffichageCarte());
+rechercheFiltre.addEventListener('input', () => { rafraichirAffichageCarte(); ajusterVueAuxPointsFiltres(); });
 
 function distanceMetres(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -1055,11 +1057,6 @@ btnListe.addEventListener('click', () => {
   if (ouvert) { compteurAttente.classList.add('cache'); construireListe(); }
   else mettreAJourBadgeAttente();
 });
-document.getElementById('btn-fermer-liste').addEventListener('click', () => {
-  panneauListe.classList.add('cache');
-  pileBoutonsFlottants.classList.remove('cache');
-  mettreAJourBadgeAttente();
-});
 triListe.addEventListener('change', construireListe);
 
 // ==================================================
@@ -1121,18 +1118,26 @@ function afficherDetailPoint(point) {
   document.getElementById('modal-detail').classList.remove('cache');
 }
 
-document.getElementById('btn-fermer-detail').addEventListener('click', () => {
-  document.getElementById('modal-detail').classList.add('cache');
+document.getElementById('btn-itineraire-point').addEventListener('click', () => {
+  document.getElementById('modal-itineraire').classList.remove('cache');
 });
 
-document.getElementById('btn-itineraire-point').addEventListener('click', () => {
-  if (!pointActuellementAffiche) return;
-  const { lat, lng } = pointActuellementAffiche;
-  window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
+document.querySelectorAll('.btn-app-navigation').forEach(bouton => {
+  bouton.addEventListener('click', () => {
+    if (!pointActuellementAffiche) return;
+    const { lat, lng } = pointActuellementAffiche;
+    const urls = {
+      google: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+      apple: `https://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`,
+      waze: `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
+    };
+    window.open(urls[bouton.dataset.app], '_blank');
+    document.getElementById('modal-itineraire').classList.add('cache');
+  });
 });
 
 // Fermeture des modales en cliquant en dehors de leur contenu
-['modal-detail', 'modal-zone', 'modal-membres'].forEach(id => {
+['modal-detail', 'modal-zone', 'modal-membres', 'modal-itineraire'].forEach(id => {
   document.getElementById(id).addEventListener('click', (e) => {
     if (e.target.id === id) document.getElementById(id).classList.add('cache');
   });
