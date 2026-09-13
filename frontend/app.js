@@ -820,8 +820,8 @@ function ajouterMarqueur(point, enAttente) {
   const nbVersions = (point.history && point.history.length > 0) ? point.history.length + 1 : 0;
   const badge = nbVersions > 0 ? `<span class="badge-nb-maj">${nbVersions}</span>` : '';
   const icone = L.divIcon({
-    className: (enAttente ? 'point-en-attente ' : '') + 'marqueur-champi',
-    html: `${htmlIcone(point.mushroomType)}${badge}`,
+    className: 'marqueur-champi-ancre',
+    html: `<div class="marqueur-champi${enAttente ? ' point-en-attente' : ''}">${htmlIcone(point.mushroomType)}${badge}</div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14]
   });
