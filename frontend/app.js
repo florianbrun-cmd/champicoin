@@ -296,6 +296,10 @@ function initCarte() {
 
   carte.on('click', (e) => {
     if (modeAjoutManuel) {
+      if (!zoomStabilisePourPlacement) {
+        alert('Le zoom vient de changer, patiente une seconde puis retape sur la carte.');
+        return;
+      }
       if (carte.getZoom() < ZOOM_MIN_PLACEMENT_MANUEL) {
         alert('Zoome davantage pour placer ce point avec précision.');
         return;
@@ -448,6 +452,7 @@ const btnPlacementManuel = document.getElementById('btn-placement-manuel');
 const bandeauPlacementManuel = document.getElementById('bandeau-placement-manuel');
 
 const ZOOM_MIN_PLACEMENT_MANUEL = 17;
+let zoomStabilisePourPlacement = true;
 
 btnPlacementManuel.addEventListener('click', () => {
   modeAjoutManuel = !modeAjoutManuel;
@@ -456,7 +461,11 @@ btnPlacementManuel.addEventListener('click', () => {
   document.getElementById('carte').classList.toggle('mode-placement-actif', modeAjoutManuel);
 
   if (modeAjoutManuel && carte.getZoom() < ZOOM_MIN_PLACEMENT_MANUEL) {
-    carte.setZoom(ZOOM_MIN_PLACEMENT_MANUEL);
+    zoomStabilisePourPlacement = false;
+    carte.once('moveend', () => { zoomStabilisePourPlacement = true; });
+    carte.setZoom(ZOOM_MIN_PLACEMENT_MANUEL, { animate: false });
+  } else {
+    zoomStabilisePourPlacement = true;
   }
 });
 
