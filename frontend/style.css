@@ -862,3 +862,45 @@ html, body {
   font-family: monospace;
   color: #888;
 }
+
+.badge-en-attente {
+  position: absolute;
+  bottom: -5px;
+  left: -5px;
+  background: white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  border: 1px solid #ddd;
+}
+
+.btn-lien-code-oublie {
+  display: block;
+  margin: 12px auto 0;
+  background: none;
+  border: none;
+  color: #3d5a35;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.resultats-code-oublie {
+  margin-top: 12px;
+  background: #f6f6f6;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.resultat-code-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 4px 0;
+}
+.resultat-code-valeur {
+  font-weight: 700;
+  color: #3d5a35;
+}

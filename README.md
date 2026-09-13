@@ -16,6 +16,7 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 2. **Rejoindre un groupe** : si quelqu'un t'a donné un code (ex. `CEPE-4821`), indique ton prénom et ce code
 3. **Créer un groupe** : donne-lui un nom ; un code est généré et à partager avec les personnes de confiance. Tu peux décocher "Rejoindre ce groupe sur cet appareil" si tu crées ce groupe pour quelqu'un d'autre sans y participer toi-même
 4. Une fois dans un groupe, installe l'app sur ton écran d'accueil : bouton Partager (iOS) ou menu ⋮ (Android) → "Sur l'écran d'accueil"
+5. **Code oublié ?** Sur l'écran de connexion, un lien permet de retrouver les groupes associés à ton prénom si tu l'as déjà utilisé pour les rejoindre
 
 ## La carte et ses boutons
 
@@ -37,6 +38,7 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 - **🎯** (sous les boutons de zoom +/-) : recentre la carte sur ta position actuelle
 - **Point bleu** : ta position en direct ; une petite flèche indique la direction de ton déplacement si le téléphone la détecte
 - **Icônes de champignon** : chaque coin enregistré, avec une icône propre à chaque espèce
+- **Icône avec un ⏳** : ce point n'est pas encore synchronisé avec le serveur (créé hors-ligne, en attente de réseau) — une fois synchronisé, l'icône redevient normale
 - **Pastille numérotée** : plusieurs coins situés à moins de 50 m les uns des autres sont regroupés ; un clic affiche le détail de chacun avec ses coordonnées exactes
 - **Échelle** : en bas à gauche, indique la distance réelle représentée sur la carte
 
@@ -75,37 +77,6 @@ Dès qu'un filtre est actif, la carte se recentre pour englober tous les points 
 
 ## Mode hors-ligne
 
-- Un point ajouté sans réseau est mis en attente localement (badge "X point(s) en attente de synchro") puis envoyé automatiquement dès que le réseau revient (ou via le bouton 🔄)
+- Un point ajouté sans réseau est mis en attente localement (badge "X point(s) en attente de synchro", icône avec un ⏳ sur la carte) puis envoyé automatiquement dès que le réseau revient (ou via le bouton 🔄)
 - Le bouton ✈️ permet de forcer ce mode manuellement, par exemple à l'étranger pour ne jamais consommer de données
 - Le bouton ⬇️ permet de précharger le fond de carte d'une zone avant de partir en forêt sans réseau
-
-## Déploiement (gratuit, sans matériel)
-
-L'application est composée de deux parties : un frontend (l'app elle-même) et un backend (le serveur + la base de données), hébergés gratuitement.
-
-### 1. Base de données — MongoDB Atlas
-1. Compte gratuit sur mongodb.com/cloud/atlas (aucune carte bancaire requise), cluster gratuit M0
-2. Onglet **Database Access** → créer un utilisateur + mot de passe
-3. Onglet **Network Access** → autoriser `0.0.0.0/0`
-4. Bouton **Connect** → "Drivers" → copier la chaîne de connexion, y ajouter `/champicoin` avant le `?`
-
-### 2. Code — GitHub
-Créer un dépôt et y pousser ce dossier (via `git` en ligne de commande, GitHub Desktop, ou directement en glissant les fichiers sur github.com).
-
-### 3. Hébergement — Render
-1. Compte gratuit sur render.com (connexion via GitHub)
-2. **New +** → **Web Service** → sélectionner le dépôt
-3. Root Directory : `backend` — Build Command : `npm install` — Start Command : `node server.js` — Instance : Free
-4. Variable d'environnement `MONGODB_URI` = la chaîne de connexion Atlas
-
-### 4. Mise à jour
-Pour toute future modification : remplacer les fichiers concernés sur GitHub (dossier `frontend` et/ou `backend`) ; Render redéploie automatiquement à chaque changement détecté.
-
-## Développement en local
-```
-cd backend
-cp .env.example .env    # renseigner MONGODB_URI
-npm install
-npm start
-```
-Ouvrir ensuite http://localhost:3000

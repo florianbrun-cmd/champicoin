@@ -105,6 +105,37 @@ document.getElementById('form-rejoindre').addEventListener('submit', async (e) =
   }
 });
 
+document.getElementById('btn-code-oublie').addEventListener('click', async () => {
+  const zoneResultats = document.getElementById('resultats-code-oublie');
+  const pseudoSaisi = document.getElementById('pseudo-rejoindre').value.trim() || prompt('Quel est le prénom/pseudo que tu utilises habituellement pour rejoindre tes groupes ?');
+  if (!pseudoSaisi) return;
+
+  if (!navigator.onLine) {
+    alert('Une connexion internet est nécessaire pour retrouver un code.');
+    return;
+  }
+
+  zoneResultats.classList.remove('cache');
+  zoneResultats.innerHTML = 'Recherche en cours...';
+
+  try {
+    const reponse = await fetch(`${API_BASE}/groups/find-by-pseudo?pseudo=${encodeURIComponent(pseudoSaisi)}`);
+    const data = await reponse.json();
+    const groupes = data.groups || [];
+
+    if (groupes.length === 0) {
+      zoneResultats.innerHTML = `Aucun groupe trouvé pour "${pseudoSaisi}". Vérifie l'orthographe exacte utilisée au moment de rejoindre le groupe.`;
+      return;
+    }
+
+    zoneResultats.innerHTML = groupes.map(g => `
+      <div class="resultat-code-item"><span>${g.name}</span><span class="resultat-code-valeur">${g.code}</span></div>
+    `).join('');
+  } catch (err) {
+    zoneResultats.innerHTML = 'Erreur réseau, réessaie plus tard.';
+  }
+});
+
 document.getElementById('form-creer').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = document.getElementById('nom-groupe').value.trim();
@@ -819,9 +850,10 @@ function rafraichirAffichageCarte() {
 function ajouterMarqueur(point, enAttente) {
   const nbVersions = (point.history && point.history.length > 0) ? point.history.length + 1 : 0;
   const badge = nbVersions > 0 ? `<span class="badge-nb-maj">${nbVersions}</span>` : '';
+  const badgeAttente = enAttente ? `<span class="badge-en-attente">⏳</span>` : '';
   const icone = L.divIcon({
     className: 'marqueur-champi-ancre',
-    html: `<div class="marqueur-champi${enAttente ? ' point-en-attente' : ''}">${htmlIcone(point.mushroomType)}${badge}</div>`,
+    html: `<div class="marqueur-champi${enAttente ? ' point-en-attente' : ''}">${htmlIcone(point.mushroomType)}${badge}${badgeAttente}</div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14]
   });
@@ -1037,24 +1069,24 @@ function distanceMetres(lat1, lng1, lat2, lng2) {
 
 function construireListe() {
   const critere = triListe.value;
-  let points = calculerPointsFiltres().map(({ point }) => point);
+  let entrees = calculerPointsFiltres();
   const positionActuelle = marqueurPosition ? marqueurPosition.getLatLng() : null;
 
   if (critere === 'proximite') {
     if (!positionActuelle) { contenuListe.innerHTML = '<p style="padding:16px;color:#888;">Position indisponible pour le tri par proximité.</p>'; return; }
-    points.sort((a, b) => distanceMetres(positionActuelle.lat, positionActuelle.lng, a.lat, a.lng) - distanceMetres(positionActuelle.lat, positionActuelle.lng, b.lat, b.lng));
+    entrees.sort((a, b) => distanceMetres(positionActuelle.lat, positionActuelle.lng, a.point.lat, a.point.lng) - distanceMetres(positionActuelle.lat, positionActuelle.lng, b.point.lat, b.point.lng));
   } else if (critere === 'recent') {
-    points.sort((a, b) => new Date(b.dateFound) - new Date(a.dateFound));
+    entrees.sort((a, b) => new Date(b.point.dateFound) - new Date(a.point.dateFound));
   } else if (critere === 'ancien') {
-    points.sort((a, b) => new Date(a.dateFound) - new Date(b.dateFound));
+    entrees.sort((a, b) => new Date(a.point.dateFound) - new Date(b.point.dateFound));
   } else if (critere === 'alpha') {
-    points.sort((a, b) => a.mushroomType.localeCompare(b.mushroomType));
+    entrees.sort((a, b) => a.point.mushroomType.localeCompare(b.point.mushroomType));
   }
 
   contenuListe.innerHTML = '';
-  if (points.length === 0) { contenuListe.innerHTML = '<p style="padding:16px;color:#888;">Aucun point à afficher.</p>'; return; }
+  if (entrees.length === 0) { contenuListe.innerHTML = '<p style="padding:16px;color:#888;">Aucun point à afficher.</p>'; return; }
 
-  points.forEach(point => {
+  entrees.forEach(({ point, enAttente }) => {
     const item = document.createElement('div');
     item.className = 'item-liste';
     let details = formaterDate(point.dateFound);
@@ -1062,6 +1094,7 @@ function construireListe() {
       const d = distanceMetres(positionActuelle.lat, positionActuelle.lng, point.lat, point.lng);
       details += ' · ' + (d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`);
     }
+    if (enAttente) details += ' · ⏳ en attente';
     item.innerHTML = `
       <div class="item-liste-icone">${htmlIcone(point.mushroomType)}</div>
       <div class="item-liste-texte">

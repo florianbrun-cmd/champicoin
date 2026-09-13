@@ -117,4 +117,18 @@ router.get('/members', async (req, res) => {
   }
 });
 
+// Retrouver les groupes associés à un pseudo (en cas de code oublié)
+router.get('/find-by-pseudo', async (req, res) => {
+  try {
+    const pseudo = (req.query.pseudo || '').trim();
+    if (!pseudo) return res.status(400).json({ error: 'Pseudo requis.' });
+
+    const groupes = await Group.find({ 'members.pseudo': new RegExp(`^${pseudo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+    res.json({ groups: groupes.map(g => ({ name: g.name, code: g.code })) });
+  } catch (erreur) {
+    console.error(erreur);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
 module.exports = router;
