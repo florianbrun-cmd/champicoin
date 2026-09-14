@@ -128,15 +128,45 @@ html, body {
   padding: 12px 16px;
   background: #3d5a35;
   color: white;
+  gap: 10px;
+}
+
+.entete-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.entete-ligne-titre {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.entete-ligne-titre strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.entete-ligne-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  margin-top: 4px;
 }
 
 .statut {
   display: inline-block;
-  margin-left: 8px;
   font-size: 11px;
   background: rgba(255,255,255,0.2);
   padding: 2px 8px;
   border-radius: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .statut.hors-ligne {
@@ -146,21 +176,24 @@ html, body {
 .code-groupe {
   font-size: 11px;
   opacity: 0.85;
-  margin-top: 2px;
   letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .entete-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .btn-icone {
   background: rgba(255,255,255,0.15);
   border: none;
   color: white;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   font-size: 16px;
   cursor: pointer;
@@ -423,6 +456,10 @@ html, body {
   border-color: #3d5a35;
 }
 
+.btn-flottant.actif {
+  box-shadow: 0 0 0 4px rgba(232,135,30,0.4), 0 4px 14px rgba(0,0,0,0.3);
+}
+
 .icone-champi-plus {
   position: relative;
   display: inline-block;
@@ -468,12 +505,30 @@ html, body {
   border-bottom: 1px solid #eee;
 }
 
+.ligne-filtre-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 #recherche-filtre {
-  width: 100%;
+  flex: 1;
   padding: 8px 12px;
   border: 1px solid #ddd;
   border-radius: 8px;
   font-size: 13px;
+}
+
+.btn-raz-filtres {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border: 1px solid #c0392b;
+  color: #c0392b;
+  background: white;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .puces-filtre {

@@ -4,7 +4,7 @@
 // - les tuiles de carte OSM sont mises en cache au fur et à mesure qu'on les consulte
 //   (donc les zones déjà visitées restent visibles hors-ligne)
 
-const CACHE_APP = 'champicoin-app-v15';
+const CACHE_APP = 'champicoin-app-v16';
 const CACHE_TUILES = 'champicoin-tuiles-v1';
 
 const FICHIERS_APP = [
@@ -66,7 +66,7 @@ self.addEventListener('fetch', (event) => {
   const url = event.request.url;
 
   // Cas particulier : les tuiles de carte OpenStreetMap
-  if (url.includes('tile.openstreetmap.org')) {
+  if (url.includes('tile.openstreetmap.org') || url.includes('tile.opentopomap.org')) {
     event.respondWith(
       caches.open(CACHE_TUILES).then(async (cache) => {
         const reponseEnCache = await cache.match(event.request);

@@ -54,16 +54,19 @@
   <!-- Écran principal : la carte -->
   <div id="ecran-carte" class="ecran cache">
     <header class="entete">
-      <div>
-        <strong id="nom-groupe-actif"></strong>
-        <button id="btn-renommer-groupe" class="btn-lien" title="Renommer le groupe">✏️</button>
-        <a id="lien-contact" class="btn-lien" href="mailto:fouillon@free.fr?subject=Champicoin%20-%20" title="Contacter le développeur">✉️</a>
-        <span id="statut-connexion" class="statut">en ligne</span>
-        <div class="code-groupe">Code : <span id="code-groupe-actif"></span></div>
+      <div class="entete-info">
+        <div class="entete-ligne-titre">
+          <strong id="nom-groupe-actif"></strong>
+          <button id="btn-renommer-groupe" class="btn-lien" title="Renommer le groupe">✏️</button>
+          <a id="lien-contact" class="btn-lien" href="mailto:fouillon@free.fr?subject=Champicoin%20-%20" title="Contacter le développeur">✉️</a>
+        </div>
+        <div class="entete-ligne-info">
+          <span id="statut-connexion" class="statut" title="Touche pour basculer en mode hors-ligne forcé">en ligne</span>
+          <span class="code-groupe">Code : <span id="code-groupe-actif"></span></span>
+        </div>
       </div>
       <div class="entete-actions">
         <button id="btn-synchro-entete" class="btn-icone" title="Forcer la synchronisation">🔄</button>
-        <button id="btn-mode-avion" class="btn-icone" title="Mode hors-ligne forcé (pour économiser les données à l'étranger)">✈️</button>
         <button id="btn-membres" class="btn-icone" title="Membres du groupe">👥</button>
         <button id="btn-liste" class="btn-icone" title="Liste des points">☰</button>
         <button id="btn-filtre" class="btn-icone" title="Filtrer">▽</button>
@@ -72,7 +75,10 @@
     </header>
 
     <div id="barre-filtre" class="barre-filtre cache">
-      <input type="text" id="recherche-filtre" placeholder="Rechercher un type...">
+      <div class="ligne-filtre-actions">
+        <input type="text" id="recherche-filtre" placeholder="Rechercher un type...">
+        <button id="btn-raz-filtres" class="btn-raz-filtres">RAZ</button>
+      </div>
       <div class="ligne-filtre-titre">Type</div>
       <div id="puces-filtre" class="puces-filtre"></div>
       <div class="ligne-filtre-titre">Mois</div>
@@ -95,7 +101,6 @@
           <option value="proximite">Du plus proche</option>
           <option value="recent">Du plus récent</option>
           <option value="ancien">Du plus ancien</option>
-          <option value="alpha">Alphabétique</option>
         </select>
       </div>
       <div id="contenu-liste" class="panneau-liste-contenu"></div>
@@ -103,20 +108,19 @@
 
     <!-- Boutons d'action flottants -->
     <div id="pile-boutons-flottants" class="pile-boutons-flottants">
+      <button id="btn-courbes-niveau" class="btn-flottant-secondaire" title="Afficher/masquer les courbes de niveau">🗻</button>
       <button id="btn-supprimer-cache-carte" class="btn-flottant-secondaire" title="Supprimer les tuiles téléchargées">🗑️</button>
       <button id="btn-telecharger-carte" class="btn-flottant-secondaire" title="Télécharger la carte pour un usage hors-ligne">⬇️</button>
       <button id="btn-importer-gpx" class="btn-flottant-secondaire" title="Importer un fichier GPX">
         <img src="icons/gpx-icon.png" class="icone-bouton" alt="Importer GPX">
       </button>
-      <button id="btn-placement-manuel" class="btn-flottant-secondaire" title="Placer un point manuellement sur la carte">✛</button>
-      <button id="btn-localiser" class="btn-flottant" title="Me localiser et ajouter un point">
+      <button id="btn-localiser" class="btn-flottant" title="Placer un point sur la carte">
         <span class="icone-champi-plus">🍄<span class="badge-plus">+</span></span>
       </button>
     </div>
     <input type="file" id="fichier-gpx" accept=".gpx" class="cache">
 
     <div id="bandeau-placement-manuel" class="bandeau-info cache">Touche la carte à l'endroit du coin à enregistrer</div>
-    <div id="bandeau-mode-avion" class="bandeau-info bandeau-avion cache">✈️ Mode hors-ligne forcé activé — aucune donnée mobile utilisée</div>
 
     <div id="compteur-attente" class="badge-attente cache"></div>
   </div>

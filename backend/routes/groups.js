@@ -5,6 +5,19 @@ const express = require('express');
 const router = express.Router();
 const Group = require('../models/Group');
 
+// Limiteur très simple contre l'énumération de pseudos : max 5 recherches / 10 min / IP.
+// (Ce n'est pas une vraie authentification — voir le README pour les limites de sécurité.)
+const tentativesRecherche = new Map(); // ip -> [timestamps]
+function trafiqueAutorise(ip) {
+  const maintenant = Date.now();
+  const fenetre = 10 * 60 * 1000;
+  const historique = (tentativesRecherche.get(ip) || []).filter(t => maintenant - t < fenetre);
+  if (historique.length >= 5) return false;
+  historique.push(maintenant);
+  tentativesRecherche.set(ip, historique);
+  return true;
+}
+
 // Génère un code lisible du type "CEPE-4821"
 function generateCode() {
   const mots = ['CEPE', 'MORILLE', 'CHANTERELLE', 'BOLET', 'AMANITE', 'TRUFFE', 'RUSSULE', 'PIED-BLEU'];
@@ -121,7 +134,12 @@ router.get('/members', async (req, res) => {
 router.get('/find-by-pseudo', async (req, res) => {
   try {
     const pseudo = (req.query.pseudo || '').trim();
-    if (!pseudo) return res.status(400).json({ error: 'Pseudo requis.' });
+    if (pseudo.length < 3) return res.status(400).json({ error: 'Indique au moins 3 caractères.' });
+
+    const ip = req.ip || req.connection.remoteAddress || 'inconnu';
+    if (!trafiqueAutorise(ip)) {
+      return res.status(429).json({ error: 'Trop de tentatives, réessaie dans quelques minutes.' });
+    }
 
     const groupes = await Group.find({ 'members.pseudo': new RegExp(`^${pseudo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
     res.json({ groups: groupes.map(g => ({ name: g.name, code: g.code })) });

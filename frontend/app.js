@@ -182,10 +182,7 @@ function entrerDansGroupe(groupe) {
   signalerPresence();
 
   if (modeAvionForce) {
-    document.getElementById('btn-mode-avion').classList.add('actif');
-    document.getElementById('bandeau-mode-avion').classList.remove('cache');
-    statutConnexion.textContent = 'hors-ligne (mode avion)';
-    statutConnexion.classList.add('hors-ligne');
+    appliquerAffichageModeAvion();
   }
 }
 
@@ -217,21 +214,22 @@ document.getElementById('btn-renommer-groupe').addEventListener('click', async (
   }
 });
 
-// --- Mode hors-ligne forcé ("mode avion") ---
-document.getElementById('btn-mode-avion').addEventListener('click', () => {
-  modeAvionForce = !modeAvionForce;
-  localStorage.setItem('champicoin_mode_avion', modeAvionForce ? '1' : '0');
-  document.getElementById('btn-mode-avion').classList.toggle('actif', modeAvionForce);
-  document.getElementById('bandeau-mode-avion').classList.toggle('cache', !modeAvionForce);
-
+// --- Mode hors-ligne forcé ("mode avion"), activé en touchant le statut "en ligne / hors-ligne" ---
+function appliquerAffichageModeAvion() {
   if (modeAvionForce) {
     statutConnexion.textContent = 'hors-ligne (mode avion)';
     statutConnexion.classList.add('hors-ligne');
   } else {
     statutConnexion.textContent = navigator.onLine ? 'en ligne' : 'hors-ligne';
     statutConnexion.classList.toggle('hors-ligne', !navigator.onLine);
-    synchroniserPointsEnAttente();
   }
+}
+
+statutConnexion.addEventListener('click', () => {
+  modeAvionForce = !modeAvionForce;
+  localStorage.setItem('champicoin_mode_avion', modeAvionForce ? '1' : '0');
+  appliquerAffichageModeAvion();
+  if (!modeAvionForce) synchroniserPointsEnAttente(true);
 });
 
 // --- Membres du groupe ---
@@ -302,14 +300,21 @@ function calculerZoomPourEchelle(latitude) {
   return Math.log2(metresParPixelEquateur / METRES_PAR_PIXEL_CIBLE);
 }
 
+let coucheStandard, coucheTopo, topoActif = false;
+
 function initCarte() {
   if (carte) return;
   carte = L.map('carte').setView([46.6, 2.2], 6);
 
-  L.tileLayer('https://a.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  coucheStandard = L.tileLayer('https://a.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; contributeurs OpenStreetMap'
   }).addTo(carte);
+
+  coucheTopo = L.tileLayer('https://a.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    maxZoom: 17,
+    attribution: '&copy; contributeurs OpenStreetMap, SRTM — style © OpenTopoMap (CC-BY-SA)'
+  });
 
   L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(carte);
 
@@ -327,14 +332,6 @@ function initCarte() {
 
   carte.on('click', (e) => {
     if (modeAjoutManuel) {
-      if (!zoomStabilisePourPlacement) {
-        alert('Le zoom vient de changer, patiente une seconde puis retape sur la carte.');
-        return;
-      }
-      if (carte.getZoom() < ZOOM_MIN_PLACEMENT_MANUEL) {
-        alert('Zoome davantage pour placer ce point avec précision.');
-        return;
-      }
       positionTemporaire = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: null, manuel: true };
       desactiverModeAjoutManuel();
       ouvrirModalAjout();
@@ -422,7 +419,9 @@ document.getElementById('btn-telecharger-carte').addEventListener('click', async
   const bouton = document.getElementById('btn-telecharger-carte');
   const zoomActuel = carte.getZoom();
   const bounds = carte.getBounds();
-  const niveaux = [zoomActuel, zoomActuel + 1, zoomActuel + 2].filter(z => z <= 19);
+  const domaineTuile = topoActif ? 'a.tile.opentopomap.org' : 'a.tile.openstreetmap.org';
+  const zoomMaxCouche = topoActif ? 17 : 19;
+  const niveaux = [zoomActuel, zoomActuel + 1, zoomActuel + 2].filter(z => z <= zoomMaxCouche);
 
   let tuiles = [];
   niveaux.forEach(z => {
@@ -430,7 +429,7 @@ document.getElementById('btn-telecharger-carte').addEventListener('click', async
     const xMax = long2tile(bounds.getEast(), z);
     const yMin = lat2tile(bounds.getNorth(), z);
     const yMax = lat2tile(bounds.getSouth(), z);
-    for (let x = xMin; x <= xMax; x++) for (let y = yMin; y <= yMax; y++) tuiles.push(`https://a.tile.openstreetmap.org/${z}/${x}/${y}.png`);
+    for (let x = xMin; x <= xMax; x++) for (let y = yMin; y <= yMax; y++) tuiles.push(`https://${domaineTuile}/${z}/${x}/${y}.png`);
   });
 
   if (tuiles.length === 0) { alert('Zoom insuffisant pour déterminer une zone à télécharger.'); return; }
@@ -449,6 +448,18 @@ document.getElementById('btn-telecharger-carte').addEventListener('click', async
   alert(`Zone téléchargée (${tuiles.length} tuiles) : elle reste consultable hors-ligne.`);
 });
 
+document.getElementById('btn-courbes-niveau').addEventListener('click', (e) => {
+  topoActif = !topoActif;
+  e.currentTarget.classList.toggle('actif', topoActif);
+  if (topoActif) {
+    carte.removeLayer(coucheStandard);
+    coucheTopo.addTo(carte);
+  } else {
+    carte.removeLayer(coucheTopo);
+    coucheStandard.addTo(carte);
+  }
+});
+
 document.getElementById('btn-supprimer-cache-carte').addEventListener('click', () => {
   if (!confirm('Supprimer toutes les tuiles de carte téléchargées pour un usage hors-ligne ?')) return;
   if (navigator.serviceWorker && navigator.serviceWorker.controller) {
@@ -463,46 +474,19 @@ document.getElementById('btn-supprimer-cache-carte').addEventListener('click', (
 // 3. AJOUT D'UN POINT (géolocalisation, manuel, GPX)
 // ==================================================
 
-document.getElementById('btn-localiser').addEventListener('click', () => {
-  if (!navigator.geolocation) { alert('La géolocalisation n\'est pas disponible sur cet appareil.'); return; }
-  const bouton = document.getElementById('btn-localiser');
-  bouton.style.opacity = '0.6';
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      bouton.style.opacity = '1';
-      positionTemporaire = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy, manuel: false };
-      carte.setView([positionTemporaire.lat, positionTemporaire.lng], 16);
-      ouvrirModalAjout();
-    },
-    (err) => { bouton.style.opacity = '1'; alert('Impossible de récupérer ta position : ' + err.message); },
-    { enableHighAccuracy: true, timeout: 15000 }
-  );
-});
-
-const btnPlacementManuel = document.getElementById('btn-placement-manuel');
+const btnLocaliser = document.getElementById('btn-localiser');
 const bandeauPlacementManuel = document.getElementById('bandeau-placement-manuel');
 
-const ZOOM_MIN_PLACEMENT_MANUEL = 17;
-let zoomStabilisePourPlacement = true;
-
-btnPlacementManuel.addEventListener('click', () => {
+btnLocaliser.addEventListener('click', () => {
   modeAjoutManuel = !modeAjoutManuel;
-  btnPlacementManuel.classList.toggle('actif', modeAjoutManuel);
+  btnLocaliser.classList.toggle('actif', modeAjoutManuel);
   bandeauPlacementManuel.classList.toggle('cache', !modeAjoutManuel);
   document.getElementById('carte').classList.toggle('mode-placement-actif', modeAjoutManuel);
-
-  if (modeAjoutManuel && carte.getZoom() < ZOOM_MIN_PLACEMENT_MANUEL) {
-    zoomStabilisePourPlacement = false;
-    carte.once('moveend', () => { zoomStabilisePourPlacement = true; });
-    carte.setZoom(ZOOM_MIN_PLACEMENT_MANUEL, { animate: false });
-  } else {
-    zoomStabilisePourPlacement = true;
-  }
 });
 
 function desactiverModeAjoutManuel() {
   modeAjoutManuel = false;
-  btnPlacementManuel.classList.remove('actif');
+  btnLocaliser.classList.remove('actif');
   bandeauPlacementManuel.classList.add('cache');
   document.getElementById('carte').classList.remove('mode-placement-actif');
 }
@@ -597,7 +581,7 @@ function texteCoordonnees(point) {
   if (point.accuracy !== null && point.accuracy !== undefined) {
     return `📍 ${coord} — précision ≈ ${Math.round(point.accuracy)} m`;
   }
-  return `📍 ${coord} — position placée manuellement`;
+  return `📍 ${coord}`;
 }
 
 function ouvrirModalAjout() {
@@ -731,7 +715,8 @@ async function synchroniserPointsEnAttente(silencieux) {
 
   localStorage.setItem('champicoin_file_attente', JSON.stringify(restants));
   mettreAJourBadgeAttente();
-  chargerPoints(); // recharge toujours, pour retirer de la carte les points désormais synchronisés
+  await chargerPoints(); // attend le rechargement complet, pour être sûr que la carte se rafraîchit
+  rafraichirAffichageCarte(); // filet de sécurité : force le nouveau rendu des marqueurs
 }
 
 document.getElementById('btn-synchro-entete').addEventListener('click', () => synchroniserPointsEnAttente(false));
@@ -824,11 +809,28 @@ function filtresActifs() {
     rechercheFiltre.value.trim() !== '';
 }
 
+document.getElementById('btn-raz-filtres').addEventListener('click', () => {
+  typesFiltreActifs.clear();
+  moisFiltreActifs.clear();
+  departementsFiltreActifs.clear();
+  rechercheFiltre.value = '';
+  construireBarreFiltre();
+  rafraichirAffichageCarte();
+});
+
 function ajusterVueAuxPointsFiltres() {
   const pointsFiltres = calculerPointsFiltres();
   if (filtresActifs() && pointsFiltres.length > 0) {
     const bounds = L.latLngBounds(pointsFiltres.map(({ point }) => [point.lat, point.lng]));
-    carte.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
+    // Le bandeau de filtre (en haut de la carte) masque une partie de la vue :
+    // on ajoute sa hauteur réelle en plus du padding, côté haut, pour que
+    // les points ne se retrouvent pas cachés dessous.
+    const hauteurBandeau = barreFiltre.classList.contains('cache') ? 0 : barreFiltre.offsetHeight;
+    carte.fitBounds(bounds, {
+      paddingTopLeft: [50, 50 + hauteurBandeau],
+      paddingBottomRight: [50, 50],
+      maxZoom: 17
+    });
   }
 }
 
@@ -1079,8 +1081,6 @@ function construireListe() {
     entrees.sort((a, b) => new Date(b.point.dateFound) - new Date(a.point.dateFound));
   } else if (critere === 'ancien') {
     entrees.sort((a, b) => new Date(a.point.dateFound) - new Date(b.point.dateFound));
-  } else if (critere === 'alpha') {
-    entrees.sort((a, b) => a.point.mushroomType.localeCompare(b.point.mushroomType));
   }
 
   contenuListe.innerHTML = '';
