@@ -4,7 +4,7 @@
 // - les tuiles de carte OSM sont mises en cache au fur et à mesure qu'on les consulte
 //   (donc les zones déjà visitées restent visibles hors-ligne)
 
-const CACHE_APP = 'champicoin-app-v16';
+const CACHE_APP = 'champicoin-app-v17';
 const CACHE_TUILES = 'champicoin-tuiles-v1';
 
 const FICHIERS_APP = [
@@ -16,13 +16,17 @@ const FICHIERS_APP = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/gpx-icon.png',
+  '/icons/mountain-icon.png',
   '/icons/champignons/cepe.png',
   '/icons/champignons/chanterelle.png',
+  '/icons/champignons/chanterelle_violette.png',
+  '/icons/champignons/hygrophore.png',
   '/icons/champignons/trompette_chanterelle.png',
   '/icons/champignons/trompette_mort.png',
   '/icons/champignons/pied_mouton.png',
   '/icons/champignons/morille.png',
   '/icons/champignons/rose_des_pres.png',
+  '/icons/champignons/petit_gris.png',
   '/icons/champignons/pleurote.png',
   '/icons/champignons/bolet.png',
   '/icons/champignons/mousseron.png',

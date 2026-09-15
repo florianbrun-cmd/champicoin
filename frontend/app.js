@@ -7,11 +7,14 @@ const API_BASE = '/api';
 const TYPE_VERS_ICONE = {
   'Cèpe': 'cepe',
   'Chanterelle (Girolle)': 'chanterelle',
+  'Chanterelle Violette': 'chanterelle_violette',
+  'Hygrophore': 'hygrophore',
   'Trompette chanterelle': 'trompette_chanterelle',
   'Trompette de mort': 'trompette_mort',
   'Pied de mouton': 'pied_mouton',
   'Morille': 'morille',
   'Rosé des prés': 'rose_des_pres',
+  'Petit gris': 'petit_gris',
   'Pleurote': 'pleurote',
   'Bolet': 'bolet',
   'Mousseron': 'mousseron',
@@ -232,6 +235,30 @@ statutConnexion.addEventListener('click', () => {
   if (!modeAvionForce) synchroniserPointsEnAttente(true);
 });
 
+function afficherToast(texte) {
+  const toast = document.createElement('div');
+  toast.className = 'toast-copie';
+  toast.textContent = texte;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 1500);
+}
+
+document.getElementById('btn-copier-code').addEventListener('click', async () => {
+  const code = groupeCourant.code;
+  try {
+    await navigator.clipboard.writeText(code);
+  } catch (err) {
+    // Solution de repli si l'API Presse-papiers n'est pas disponible
+    const champTemporaire = document.createElement('textarea');
+    champTemporaire.value = code;
+    document.body.appendChild(champTemporaire);
+    champTemporaire.select();
+    document.execCommand('copy');
+    champTemporaire.remove();
+  }
+  afficherToast('Code copié !');
+});
+
 // --- Membres du groupe ---
 async function signalerPresence() {
   if (!estEnLigne() || !groupeCourant) return;
@@ -309,12 +336,26 @@ function initCarte() {
   coucheStandard = L.tileLayer('https://a.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; contributeurs OpenStreetMap'
-  }).addTo(carte);
+  });
 
   coucheTopo = L.tileLayer('https://a.tile.opentopomap.org/{z}/{x}/{y}.png', {
     maxZoom: 17,
     attribution: '&copy; contributeurs OpenStreetMap, SRTM — style © OpenTopoMap (CC-BY-SA)'
   });
+
+  // La carte avec courbes de niveau est affichée par défaut, sauf connexion détectée comme lente
+  const connexionLente = navigator.connection &&
+    (navigator.connection.saveData || ['slow-2g', '2g'].includes(navigator.connection.effectiveType));
+
+  if (connexionLente) {
+    topoActif = false;
+    coucheStandard.addTo(carte);
+    document.getElementById('btn-courbes-niveau').classList.remove('actif');
+  } else {
+    topoActif = true;
+    coucheTopo.addTo(carte);
+    document.getElementById('btn-courbes-niveau').classList.add('actif');
+  }
 
   L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(carte);
 
@@ -327,20 +368,39 @@ function initCarte() {
     );
   }
 
+  if (navigator.connection && navigator.connection.addEventListener) {
+    navigator.connection.addEventListener('change', () => {
+      const lente = navigator.connection.saveData || ['slow-2g', '2g'].includes(navigator.connection.effectiveType);
+      if (lente && topoActif) {
+        if (confirm('Connexion lente détectée. Basculer sur la carte simplifiée (sans relief), plus légère ?')) {
+          document.getElementById('btn-courbes-niveau').click();
+        }
+      }
+    });
+  }
+
   demarrerSuiviPosition();
   ajouterControleLocalisation();
 
+  carte.on('zoomend', () => rafraichirAffichageCarte());
+
+  // Corrige un souci d'affichage mobile : la taille réelle du conteneur peut ne se
+  // stabiliser qu'après le premier rendu (barre d'adresse qui se réduit, etc.)
+  setTimeout(() => carte.invalidateSize(), 300);
+
   carte.on('click', (e) => {
     if (modeAjoutManuel) {
-      positionTemporaire = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: null, manuel: true };
+      positionTemporaire = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: null, elevation: null, manuel: true };
       desactiverModeAjoutManuel();
       ouvrirModalAjout();
+      recupererAltitude(e.latlng.lat, e.latlng.lng);
       return;
     }
     // Un clic sur la carte referme les panneaux ouverts (filtre, liste)
     if (!barreFiltre.classList.contains('cache')) {
       barreFiltre.classList.add('cache');
       btnFiltre.classList.remove('actif');
+      setTimeout(() => carte.invalidateSize(), 0);
     }
     if (!panneauListe.classList.contains('cache')) {
       panneauListe.classList.add('cache');
@@ -392,7 +452,7 @@ function ajouterControleLocalisation() {
       L.DomEvent.on(lien, 'click', L.DomEvent.stopPropagation);
       L.DomEvent.on(lien, 'click', L.DomEvent.preventDefault);
       L.DomEvent.on(lien, 'click', () => {
-        const centrerSur = (lat, lng) => carte.setView([lat, lng], calculerZoomPourEchelle(lat));
+        const centrerSur = (lat, lng) => carte.setView([lat, lng], carte.getMaxZoom());
         if (marqueurPosition) {
           const p = marqueurPosition.getLatLng();
           centrerSur(p.lat, p.lng);
@@ -460,6 +520,29 @@ document.getElementById('btn-courbes-niveau').addEventListener('click', (e) => {
   }
 });
 
+document.getElementById('btn-sauvegarde').addEventListener('click', () => {
+  if (tousLesPoints.length === 0) {
+    alert('Aucun point chargé à sauvegarder. Vérifie que tu es bien en ligne, puis réessaie.');
+    return;
+  }
+  const donnees = {
+    exportePar: getPseudo() || 'inconnu',
+    exporteLe: new Date().toISOString(),
+    groupe: { nom: groupeCourant.name, code: groupeCourant.code },
+    points: tousLesPoints.map(({ point }) => point)
+  };
+  const blob = new Blob([JSON.stringify(donnees, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const lien = document.createElement('a');
+  const dateFichier = new Date().toISOString().slice(0, 10);
+  lien.href = url;
+  lien.download = `champicoin-sauvegarde-${groupeCourant.code}-${dateFichier}.json`;
+  document.body.appendChild(lien);
+  lien.click();
+  lien.remove();
+  URL.revokeObjectURL(url);
+});
+
 document.getElementById('btn-supprimer-cache-carte').addEventListener('click', () => {
   if (!confirm('Supprimer toutes les tuiles de carte téléchargées pour un usage hors-ligne ?')) return;
   if (navigator.serviceWorker && navigator.serviceWorker.controller) {
@@ -483,6 +566,24 @@ btnLocaliser.addEventListener('click', () => {
   bandeauPlacementManuel.classList.toggle('cache', !modeAjoutManuel);
   document.getElementById('carte').classList.toggle('mode-placement-actif', modeAjoutManuel);
 });
+
+async function recupererAltitude(lat, lng) {
+  try {
+    const reponse = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
+    const data = await reponse.json();
+    const altitude = data?.elevation?.[0];
+    if (altitude === undefined) return;
+    if (positionTemporaire && positionTemporaire.lat === lat && positionTemporaire.lng === lng) {
+      positionTemporaire.elevation = altitude;
+      const zoneCoord = document.getElementById('coordonnees-ajout');
+      if (zoneCoord && !document.getElementById('modal-ajout').classList.contains('cache')) {
+        zoneCoord.textContent = texteCoordonnees(positionTemporaire);
+      }
+    }
+  } catch (err) {
+    // Service d'altitude indisponible : ce n'est pas bloquant, on continue sans.
+  }
+}
 
 function desactiverModeAjoutManuel() {
   modeAjoutManuel = false;
@@ -578,10 +679,14 @@ function formaterCoordDMM(lat, lng) {
 function texteCoordonnees(point) {
   if (!point) return '';
   const coord = formaterCoordDMM(point.lat, point.lng);
+  let texte = `📍 ${coord}`;
   if (point.accuracy !== null && point.accuracy !== undefined) {
-    return `📍 ${coord} — précision ≈ ${Math.round(point.accuracy)} m`;
+    texte += ` — précision ≈ ${Math.round(point.accuracy)} m`;
   }
-  return `📍 ${coord}`;
+  if (point.elevation !== null && point.elevation !== undefined) {
+    texte += ` — altitude ≈ ${Math.round(point.elevation)} m`;
+  }
+  return texte;
 }
 
 function ouvrirModalAjout() {
@@ -638,6 +743,7 @@ document.getElementById('form-champignon').addEventListener('submit', async (e) 
   } else {
     const nouveauPoint = {
       lat: positionTemporaire.lat, lng: positionTemporaire.lng, accuracy: positionTemporaire.accuracy,
+      elevation: positionTemporaire.elevation ?? null,
       ...donneesFormulaire, createdBy: getPseudo(),
       clientId: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2)
     };
@@ -695,31 +801,45 @@ async function synchroniserPointsEnAttente(silencieux) {
   }
 
   const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
-  if (file.length === 0) {
-    if (!silencieux) alert('Rien à synchroniser, tout est déjà à jour.');
-    return;
-  }
 
-  const restants = [];
-  for (const point of file) {
-    try {
-      const reponse = await fetch(`${API_BASE}/spots`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...point, groupCode: groupeCourant.code, author: point.createdBy || getPseudo() })
-      });
-      if (!reponse.ok) restants.push(point);
-    } catch (err) {
-      restants.push(point);
+  if (file.length > 0) {
+    const restants = [];
+    for (const point of file) {
+      try {
+        const reponse = await fetch(`${API_BASE}/spots`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...point, groupCode: groupeCourant.code, author: point.createdBy || getPseudo() })
+        });
+        if (!reponse.ok) restants.push(point);
+      } catch (err) {
+        restants.push(point);
+      }
     }
+    localStorage.setItem('champicoin_file_attente', JSON.stringify(restants));
+    mettreAJourBadgeAttente();
+  } else if (!silencieux) {
+    alert('Rien à synchroniser, tout est déjà à jour.');
   }
 
-  localStorage.setItem('champicoin_file_attente', JSON.stringify(restants));
-  mettreAJourBadgeAttente();
-  await chargerPoints(); // attend le rechargement complet, pour être sûr que la carte se rafraîchit
-  rafraichirAffichageCarte(); // filet de sécurité : force le nouveau rendu des marqueurs
+  // Rafraîchissement systématique de la carte, qu'il y ait eu quelque chose à
+  // synchroniser ou non : garantit qu'un point déjà synchronisé plus tôt ne
+  // reste jamais affiché avec un sablier obsolète.
+  await chargerPoints();
+  rafraichirAffichageCarte();
 }
 
 document.getElementById('btn-synchro-entete').addEventListener('click', () => synchroniserPointsEnAttente(false));
+
+document.querySelector('.code-groupe').addEventListener('click', () => {
+  if (!groupeCourant) return;
+  navigator.clipboard.writeText(groupeCourant.code).then(() => {
+    const toast = document.createElement('div');
+    toast.className = 'toast-copie';
+    toast.textContent = 'Code copié !';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 1500);
+  }).catch(() => alert('Impossible de copier automatiquement, voici le code : ' + groupeCourant.code));
+});
 
 function mettreAJourBadgeAttente() {
   const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
@@ -782,7 +902,7 @@ function calculerPointsFiltres() {
 }
 
 // --- Regroupement en "zones" : coins distants de moins de DISTANCE_ZONE_M ---
-const DISTANCE_ZONE_M = 50;
+const RAYON_CLUSTER_PIXELS = 40; // distance à l'écran, indépendante du zoom : fusion sous ce seuil
 
 function calculerZones(pointsAvecMeta) {
   const n = pointsAvecMeta.length;
@@ -790,10 +910,15 @@ function calculerZones(pointsAvecMeta) {
   function find(i) { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; }
   function union(a, b) { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; }
 
+  // Distance à l'écran (en pixels) à l'échelle actuelle : plus on zoome, plus les points
+  // s'écartent visuellement, jusqu'à dépasser le seuil et se séparer automatiquement.
+  const pointsEcran = pointsAvecMeta.map(({ point }) => carte.latLngToContainerPoint([point.lat, point.lng]));
+
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      const d = distanceMetres(pointsAvecMeta[i].point.lat, pointsAvecMeta[i].point.lng, pointsAvecMeta[j].point.lat, pointsAvecMeta[j].point.lng);
-      if (d < DISTANCE_ZONE_M) union(i, j);
+      const dx = pointsEcran[i].x - pointsEcran[j].x;
+      const dy = pointsEcran[i].y - pointsEcran[j].y;
+      if (Math.sqrt(dx * dx + dy * dy) < RAYON_CLUSTER_PIXELS) union(i, j);
     }
   }
   const groupes = {};
@@ -821,16 +946,9 @@ document.getElementById('btn-raz-filtres').addEventListener('click', () => {
 function ajusterVueAuxPointsFiltres() {
   const pointsFiltres = calculerPointsFiltres();
   if (filtresActifs() && pointsFiltres.length > 0) {
+    carte.invalidateSize();
     const bounds = L.latLngBounds(pointsFiltres.map(({ point }) => [point.lat, point.lng]));
-    // Le bandeau de filtre (en haut de la carte) masque une partie de la vue :
-    // on ajoute sa hauteur réelle en plus du padding, côté haut, pour que
-    // les points ne se retrouvent pas cachés dessous.
-    const hauteurBandeau = barreFiltre.classList.contains('cache') ? 0 : barreFiltre.offsetHeight;
-    carte.fitBounds(bounds, {
-      paddingTopLeft: [50, 50 + hauteurBandeau],
-      paddingBottomRight: [50, 50],
-      maxZoom: 17
-    });
+    carte.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
   }
 }
 
@@ -850,12 +968,12 @@ function rafraichirAffichageCarte() {
 }
 
 function ajouterMarqueur(point, enAttente) {
-  const nbVersions = (point.history && point.history.length > 0) ? point.history.length + 1 : 0;
-  const badge = nbVersions > 0 ? `<span class="badge-nb-maj">${nbVersions}</span>` : '';
   const badgeAttente = enAttente ? `<span class="badge-en-attente">⏳</span>` : '';
+  const nbVisites = 1 + (point.history ? point.history.length : 0);
+  const productif = nbVisites >= 3 ? ' marqueur-productif' : '';
   const icone = L.divIcon({
     className: 'marqueur-champi-ancre',
-    html: `<div class="marqueur-champi${enAttente ? ' point-en-attente' : ''}">${htmlIcone(point.mushroomType)}${badge}${badgeAttente}</div>`,
+    html: `<div class="marqueur-champi${enAttente ? ' point-en-attente' : ''}${productif}">${htmlIcone(point.mushroomType)}${badgeAttente}</div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14]
   });
@@ -866,11 +984,20 @@ function ajouterMarqueur(point, enAttente) {
 function ajouterMarqueurZone(zone) {
   const latMoy = zone.reduce((s, z) => s + z.point.lat, 0) / zone.length;
   const lngMoy = zone.reduce((s, z) => s + z.point.lng, 0) / zone.length;
+
+  const nbTypes = new Set(zone.map(z => z.point.mushroomType)).size;
+  let niveau = '';
+  let taille = 34;
+  if (zone.length >= 10) { niveau = ' niveau-3'; taille = 42; }
+  else if (zone.length >= 5) { niveau = ' niveau-2'; taille = 38; }
+
+  const badgeTypes = nbTypes > 1 ? `<span class="badge-nb-types">${nbTypes}</span>` : '';
+
   const icone = L.divIcon({
     className: 'marqueur-zone-wrapper',
-    html: `<div class="marqueur-zone">${zone.length}</div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17]
+    html: `<div class="marqueur-zone${niveau}">${zone.length}${badgeTypes}</div>`,
+    iconSize: [taille, taille],
+    iconAnchor: [taille / 2, taille / 2]
   });
   const marqueur = L.marker([latMoy, lngMoy], { icon: icone }).addTo(coucheMarqueurs);
   marqueur.on('click', () => afficherZone(zone));
@@ -1055,6 +1182,7 @@ async function chargerTousLesDepartements() {
 btnFiltre.addEventListener('click', () => {
   barreFiltre.classList.toggle('cache');
   btnFiltre.classList.toggle('actif');
+  setTimeout(() => carte.invalidateSize(), 0);
 });
 rechercheFiltre.addEventListener('input', () => { rafraichirAffichageCarte(); ajusterVueAuxPointsFiltres(); });
 
@@ -1139,7 +1267,11 @@ let pointActuellementAffiche = null;
 
 function afficherDetailPoint(point) {
   pointActuellementAffiche = point;
-  document.getElementById('detail-type').innerHTML = `${htmlIcone(point.mushroomType)} ${point.mushroomType}`;
+  const zoneType = document.getElementById('detail-type');
+  zoneType.innerHTML = `${htmlIcone(point.mushroomType)} ${point.mushroomType}`;
+  zoneType.className = point._id ? 'detail-type-cliquable' : '';
+  zoneType.onclick = point._id ? () => ouvrirModalModification(point) : null;
+
   document.getElementById('detail-date').textContent = formaterDate(point.dateFound);
   document.getElementById('detail-notes').textContent = point.notes || '';
   document.getElementById('detail-coordonnees').textContent = texteCoordonnees(point);
