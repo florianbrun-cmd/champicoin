@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aide — Champicoin</title>
+<link rel="icon" href="icons/icon-192.png">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0;
+    background: #f4f1ea;
+    color: #333;
+    line-height: 1.5;
+  }
+  header {
+    background: #3d5a35;
+    color: white;
+    padding: 24px 20px;
+  }
+  header h1 { margin: 0 0 4px; font-size: 24px; }
+  header p { margin: 0; opacity: 0.85; font-size: 14px; }
+  main { max-width: 720px; margin: 0 auto; padding: 20px; }
+  h2 { color: #3d5a35; margin-top: 32px; border-bottom: 2px solid #eee; padding-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+  th { color: #3d5a35; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  code { background: #eee; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .avertissement { background: #fdf0e5; border-left: 4px solid #e8871e; padding: 10px 14px; border-radius: 4px; font-size: 14px; }
+  a.retour { display: inline-block; margin-top: 24px; color: #3d5a35; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🍄 Champicoin — Aide</h1>
+  <p>Mode d'emploi de l'application</p>
+</header>
+
+<main>
+
+<h2>À quoi ça sert ?</h2>
+<ul>
+  <li>Tu marques sur une carte l'endroit exact où tu as trouvé un champignon</li>
+  <li>Tu précises le type de champignon, la date, et des notes — l'altitude est récupérée automatiquement</li>
+  <li>Ces coins sont partagés avec un <b>groupe privé</b> : seules les personnes ayant le code d'accès du groupe les voient</li>
+  <li>L'application fonctionne <b>hors-ligne</b> (zones sans réseau en forêt) : les points sont enregistrés localement puis synchronisés dès que le réseau revient</li>
+  <li>Installable comme une vraie application sur ton téléphone (PWA), sans passer par l'App Store / Play Store</li>
+</ul>
+
+<h2>Premiers pas</h2>
+<ul>
+  <li><b>Rejoindre un groupe</b> : si quelqu'un t'a donné un code (ex. <code>CEPE-4821</code>), indique ton prénom et ce code</li>
+  <li><b>Créer un groupe</b> : donne-lui un nom ; un code est généré et à partager avec les personnes de confiance. Tu peux décocher "Rejoindre ce groupe sur cet appareil" si tu crées ce groupe pour quelqu'un d'autre sans y participer toi-même</li>
+  <li>Une fois dans un groupe, installe l'app sur ton écran d'accueil : bouton Partager (iOS) ou menu ⋮ (Android) → "Sur l'écran d'accueil"</li>
+  <li><b>Code oublié ?</b> Sur l'écran de connexion, un lien permet de retrouver les groupes associés à ton prénom, s'il a déjà été utilisé pour en rejoindre un.
+    <div class="avertissement">⚠️ L'application n'ayant pas de vrais comptes avec mot de passe, ce n'est pas une sécurité forte — juste un dépannage en cas d'oubli.</div>
+  </li>
+</ul>
+
+<h2>En haut de l'écran</h2>
+<table>
+<tr><th>Élément</th><th>Fonction</th></tr>
+<tr><td>✏️</td><td>Renommer le groupe</td></tr>
+<tr><td>✉️</td><td>Contacter le développeur par email (bug, suggestion)</td></tr>
+<tr><td>❓</td><td>Cette page d'aide</td></tr>
+<tr><td>Pastille "en ligne / hors-ligne"</td><td>Indique ta connexion — touche-la pour activer/désactiver le <b>mode hors-ligne forcé</b> (utile à l'étranger)</td></tr>
+<tr><td>Code affiché</td><td>Touche-le pour le copier dans le presse-papiers</td></tr>
+<tr><td>🔄</td><td>Forcer la synchronisation immédiate des points en attente</td></tr>
+<tr><td>👥</td><td>Liste des membres du groupe et leur dernière connexion</td></tr>
+<tr><td>☰</td><td>Liste de tous les points affichés, triable (proximité, plus récent, plus ancien) — inclut un bouton 🧹 pour supprimer les doublons (même date + mêmes coordonnées exactes)</td></tr>
+<tr><td>▽</td><td>Filtres (recherche, type, mois, département), avec un bouton <b>RAZ</b></td></tr>
+<tr><td>⇄</td><td>Change de groupe (déconnexion de cet appareil)</td></tr>
+</table>
+
+<h2>Sur la carte</h2>
+<ul>
+  <li><b>🎯</b> (sous les boutons de zoom) : recentre la carte sur ta position, au zoom maximum</li>
+  <li><b>Point bleu</b> : ta position en direct, avec une flèche de direction si détectée</li>
+  <li><b>Icônes de champignon</b> : chaque coin, avec une icône propre à chaque espèce</li>
+  <li><b>Icône avec un ⏳</b> : point pas encore synchronisé (créé hors-ligne)</li>
+  <li><b>Halo doré</b> : coin régulièrement réactualisé au fil des années — repère un coin productif</li>
+  <li><b>Pastille numérotée</b> : coins trop proches à ce niveau de zoom, regroupés (gros chiffre = nombre de coins, petit badge = nombre de types différents). Zoome pour les séparer, dézoome pour les regrouper</li>
+  <li><b>Échelle</b> : en bas à gauche</li>
+  <li>Fond de carte <b>avec courbes de niveau</b> par défaut ; bascule automatique proposée si connexion lente</li>
+</ul>
+
+<h2>Boutons flottants (bas à droite)</h2>
+<table>
+<tr><th>Bouton</th><th>Fonction</th></tr>
+<tr><td>🍄+</td><td>Arme le mode "placement d'un point" : touche ensuite la carte à l'endroit exact</td></tr>
+<tr><td>📂 GPX</td><td>Importe des points depuis un fichier GPX</td></tr>
+<tr><td>💾</td><td>Télécharge une sauvegarde locale au format GPX de tous les points chargés</td></tr>
+<tr><td>⬇️</td><td>Télécharge les tuiles de la carte affichée pour un usage hors-ligne</td></tr>
+<tr><td>🗑️</td><td>Supprime les tuiles téléchargées</td></tr>
+<tr><td>🗻</td><td>Bascule entre carte avec relief et carte simplifiée</td></tr>
+</table>
+
+<h2>Ajouter ou modifier un coin</h2>
+<p>Choisis le type (liste alphabétique, ou "Autres" pour un nom libre), la date, des notes. Coordonnées et altitude sont calculées automatiquement.</p>
+<p>Dans le détail d'un point, <b>touche le nom du champignon</b> pour le modifier (position non modifiable — supprime et recrée pour corriger un emplacement).</p>
+
+<h2>Filtres</h2>
+<ul>
+  <li><b>Recherche</b> : par mot dans le type</li>
+  <li><b>Type</b> : sélection multiple</li>
+  <li><b>Mois</b> : uniquement les mois avec des coins enregistrés</li>
+  <li><b>Département</b> : calculé automatiquement (nécessite d'être en ligne la première fois)</li>
+  <li><b>RAZ</b> : réinitialise tout</li>
+</ul>
+
+<h2>Mode hors-ligne</h2>
+<ul>
+  <li>Point ajouté sans réseau → mis en attente localement, synchronisé automatiquement au retour du réseau (ou via 🔄)</li>
+  <li>Pastille "en ligne/hors-ligne" → force le mode hors-ligne manuellement</li>
+  <li>⬇️ → précharge le fond de carte d'une zone avant une sortie sans réseau</li>
+  <li>💾 → exporte une sauvegarde de tous tes points, à tout moment</li>
+</ul>
+
+<a class="retour" href="javascript:window.close()">← Fermer cette page</a>
+
+</main>
+</body>
+</html>

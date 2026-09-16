@@ -520,23 +520,40 @@ document.getElementById('btn-courbes-niveau').addEventListener('click', (e) => {
   }
 });
 
+function echapperXml(texte) {
+  return String(texte || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 document.getElementById('btn-sauvegarde').addEventListener('click', () => {
   if (tousLesPoints.length === 0) {
     alert('Aucun point chargé à sauvegarder. Vérifie que tu es bien en ligne, puis réessaie.');
     return;
   }
-  const donnees = {
-    exportePar: getPseudo() || 'inconnu',
-    exporteLe: new Date().toISOString(),
-    groupe: { nom: groupeCourant.name, code: groupeCourant.code },
-    points: tousLesPoints.map(({ point }) => point)
-  };
-  const blob = new Blob([JSON.stringify(donnees, null, 2)], { type: 'application/json' });
+
+  const waypoints = tousLesPoints.map(({ point }) => {
+    const nom = echapperXml(point.mushroomType);
+    const notesEchappees = echapperXml(point.notes || '');
+    const dateIso = point.dateFound ? `${point.dateFound}T00:00:00Z` : '';
+    const eleTag = (point.elevation !== null && point.elevation !== undefined) ? `<ele>${point.elevation}</ele>` : '';
+    return `  <wpt lat="${point.lat}" lon="${point.lng}">
+    ${eleTag}
+    <time>${dateIso}</time>
+    <name>${nom}</name>
+    <desc>${notesEchappees}</desc>
+  </wpt>`;
+  }).join('\n');
+
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Champicoin" xmlns="http://www.topografix.com/GPX/1/1">
+${waypoints}
+</gpx>`;
+
+  const blob = new Blob([gpx], { type: 'application/gpx+xml' });
   const url = URL.createObjectURL(blob);
   const lien = document.createElement('a');
   const dateFichier = new Date().toISOString().slice(0, 10);
   lien.href = url;
-  lien.download = `champicoin-sauvegarde-${groupeCourant.code}-${dateFichier}.json`;
+  lien.download = `champicoin-sauvegarde-${groupeCourant.code}-${dateFichier}.gpx`;
   document.body.appendChild(lien);
   lien.click();
   lien.remove();
@@ -818,7 +835,7 @@ async function synchroniserPointsEnAttente(silencieux) {
     localStorage.setItem('champicoin_file_attente', JSON.stringify(restants));
     mettreAJourBadgeAttente();
   } else if (!silencieux) {
-    alert('Rien à synchroniser, tout est déjà à jour.');
+    afficherToast('Tout est déjà à jour.');
   }
 
   // Rafraîchissement systématique de la carte, qu'il y ait eu quelque chose à
@@ -830,15 +847,38 @@ async function synchroniserPointsEnAttente(silencieux) {
 
 document.getElementById('btn-synchro-entete').addEventListener('click', () => synchroniserPointsEnAttente(false));
 
-document.querySelector('.code-groupe').addEventListener('click', () => {
-  if (!groupeCourant) return;
-  navigator.clipboard.writeText(groupeCourant.code).then(() => {
-    const toast = document.createElement('div');
-    toast.className = 'toast-copie';
-    toast.textContent = 'Code copié !';
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 1500);
-  }).catch(() => alert('Impossible de copier automatiquement, voici le code : ' + groupeCourant.code));
+document.getElementById('btn-nettoyer-doublons').addEventListener('click', async () => {
+  if (!estEnLigne()) { alert('Une connexion internet est nécessaire pour nettoyer les doublons.'); return; }
+
+  const parCle = new Map();
+  tousLesPoints.forEach(({ point }) => {
+    if (!point._id) return; // on ignore les points pas encore synchronisés
+    const cle = `${point.lat.toFixed(6)}_${point.lng.toFixed(6)}_${point.dateFound}`;
+    (parCle.get(cle) || parCle.set(cle, []).get(cle)).push(point);
+  });
+
+  const aSupprimer = [];
+  parCle.forEach(points => {
+    if (points.length > 1) {
+      // On garde le premier (le plus ancien _id), on supprime le reste
+      const tries = [...points].sort((a, b) => (a._id > b._id ? 1 : -1));
+      aSupprimer.push(...tries.slice(1));
+    }
+  });
+
+  if (aSupprimer.length === 0) {
+    afficherToast('Aucun doublon trouvé.');
+    return;
+  }
+
+  if (!confirm(`${aSupprimer.length} point(s) en double détecté(s) (même date et mêmes coordonnées exactes). Les supprimer définitivement ?`)) return;
+
+  for (const point of aSupprimer) {
+    await fetch(`${API_BASE}/spots/${point._id}?groupCode=${encodeURIComponent(groupeCourant.code)}`, { method: 'DELETE' });
+  }
+
+  afficherToast(`${aSupprimer.length} doublon(s) supprimé(s).`);
+  chargerPoints();
 });
 
 function mettreAJourBadgeAttente() {
@@ -882,6 +922,46 @@ async function chargerPoints() {
 
   construireBarreFiltre();
   rafraichirAffichageCarte();
+  rattraperAltitudesManquantes();
+}
+
+// Complète en tâche de fond l'altitude des points créés avant l'ajout de cette fonctionnalité.
+// Un seul appel groupé au service d'altitude (jusqu'à 90 coordonnées à la fois), puis on
+// enregistre chaque résultat côté serveur sans créer d'entrée d'historique.
+let rattrapageAltitudeEnCours = false;
+async function rattraperAltitudesManquantes() {
+  if (rattrapageAltitudeEnCours || !estEnLigne()) return;
+  const aCompleter = tousLesPoints
+    .map(e => e.point)
+    .filter(p => p._id && (p.elevation === null || p.elevation === undefined));
+  if (aCompleter.length === 0) return;
+
+  rattrapageAltitudeEnCours = true;
+  try {
+    const lot = aCompleter.slice(0, 90); // limite raisonnable par appel
+    const lats = lot.map(p => p.lat).join(',');
+    const lngs = lot.map(p => p.lng).join(',');
+    const reponse = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lngs}`);
+    const data = await reponse.json();
+    const elevations = data?.elevation || [];
+
+    for (let i = 0; i < lot.length; i++) {
+      const altitude = elevations[i];
+      if (altitude === undefined) continue;
+      try {
+        await fetch(`${API_BASE}/spots/${lot[i]._id}/elevation`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ groupCode: groupeCourant.code, elevation: altitude })
+        });
+        lot[i].elevation = altitude; // mise à jour locale immédiate, sans recharger toute la carte
+      } catch (err) { /* on continue avec les suivants */ }
+    }
+  } catch (err) {
+    // Service d'altitude indisponible pour le moment : on réessaiera au prochain chargement.
+  } finally {
+    rattrapageAltitudeEnCours = false;
+  }
 }
 
 function calculerPointsFiltres() {

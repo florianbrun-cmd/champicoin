@@ -25,11 +25,12 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 |---|---|
 | ✏️ à côté du nom du groupe | Renommer le groupe |
 | ✉️ | Contacter le développeur par email (bug, suggestion) |
+| ❓ | Ouvre cette page d'aide dans un nouvel onglet |
 | Pastille "en ligne / hors-ligne" | Indique ta connexion — **touche-la pour activer/désactiver le mode hors-ligne forcé** (utile à l'étranger, pour ne jamais utiliser de données mobiles) |
 | Code affiché | **Touche-le pour le copier** dans le presse-papiers, prêt à partager |
 | 🔄 | Forcer la synchronisation immédiate des points en attente |
 | 👥 | Liste des membres du groupe et la date/heure de leur dernière connexion |
-| ☰ | Liste de tous les points affichés, triable (proximité, plus récent, plus ancien) |
+| ☰ | Liste de tous les points affichés, triable (proximité, plus récent, plus ancien) — bouton 🧹 pour supprimer les doublons (même date et mêmes coordonnées exactes) |
 | ▽ | Ouvre les filtres (recherche, type de champignon, mois, département), avec un bouton **RAZ** pour tout réinitialiser |
 | ⇄ | Change de groupe (déconnexion de cet appareil) |
 
@@ -48,7 +49,7 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 |---|---|
 | 🍄+ (gros bouton) | Arme le mode "placement d'un point" : touche ensuite la carte à l'endroit exact du coin pour l'enregistrer |
 | 📂 GPX | Importe des points depuis un fichier GPX (export d'un GPS de randonnée, par exemple) |
-| 💾 | Télécharge une sauvegarde locale (fichier JSON) de tous les points actuellement chargés — pratique "au cas où" |
+| 💾 | Télécharge une sauvegarde locale (fichier **GPX**, lisible par un GPS ou une appli de randonnée) de tous les points actuellement chargés — pratique "au cas où" |
 | ⬇️ | Télécharge les tuiles de la carte actuellement affichée (standard ou topo) pour la zone visible, utilisable ensuite sans réseau |
 | 🗑️ | Supprime les tuiles de carte téléchargées précédemment (libère de l'espace) |
 | 🗻 | Bascule entre le fond de carte avec courbes de niveau et le fond simplifié |
@@ -85,4 +86,4 @@ Dès qu'un filtre est actif, la carte se recentre pour englober tous les points 
 - Un point ajouté sans réseau est mis en attente localement (badge "X point(s) en attente de synchro", icône avec un ⏳ sur la carte) puis envoyé automatiquement dès que le réseau revient (ou via le bouton 🔄)
 - Toucher la pastille "en ligne / hors-ligne" dans l'en-tête force le mode hors-ligne manuellement, par exemple à l'étranger pour ne jamais consommer de données
 - Le bouton ⬇️ permet de précharger le fond de carte d'une zone avant de partir en forêt sans réseau
-- Le bouton 💾 permet d'exporter une copie de sauvegarde de tous tes points en local, à tout moment
+- Le bouton 💾 permet d'exporter une copie de sauvegarde (GPX) de tous tes points en local, à tout moment

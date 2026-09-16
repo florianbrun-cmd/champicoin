@@ -132,4 +132,28 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Renseigne l'altitude d'un point existant qui ne l'a pas encore (rattrapage),
+// sans toucher à l'historique puisqu'il ne s'agit pas d'une modification par un utilisateur.
+router.patch('/:id/elevation', async (req, res) => {
+  try {
+    const { groupCode, elevation } = req.body;
+    const groupe = await verifierGroupe(groupCode);
+    if (!groupe) return res.status(403).json({ error: 'Code de groupe invalide.' });
+    if (elevation === undefined || elevation === null) {
+      return res.status(400).json({ error: 'Altitude requise.' });
+    }
+
+    const spot = await Spot.findOneAndUpdate(
+      { _id: req.params.id, groupCode: groupe.code },
+      { $set: { elevation } },
+      { new: true }
+    );
+    if (!spot) return res.status(404).json({ error: 'Point introuvable.' });
+    res.json({ spot });
+  } catch (erreur) {
+    console.error(erreur);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
 module.exports = router;
