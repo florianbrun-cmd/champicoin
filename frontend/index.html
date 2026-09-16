@@ -116,14 +116,14 @@
       <button id="btn-supprimer-cache-carte" class="btn-flottant-secondaire" title="Supprimer les tuiles téléchargées">🗑️</button>
       <button id="btn-telecharger-carte" class="btn-flottant-secondaire" title="Télécharger la carte pour un usage hors-ligne">⬇️</button>
       <button id="btn-sauvegarde" class="btn-flottant-secondaire" title="Télécharger une sauvegarde locale des points">💾</button>
-      <button id="btn-importer-gpx" class="btn-flottant-secondaire" title="Importer un fichier GPX">
-        <img src="icons/gpx-icon.png" class="icone-bouton" alt="Importer GPX">
+      <button id="btn-importer-gpx" class="btn-flottant-secondaire" title="Importer un fichier GPX ou des photos géolocalisées">
+        <img src="icons/import-icon.png" class="icone-bouton" alt="Importer">
       </button>
       <button id="btn-localiser" class="btn-flottant" title="Placer un point sur la carte">
         <span class="icone-champi-plus">🍄<span class="badge-plus">+</span></span>
       </button>
     </div>
-    <input type="file" id="fichier-gpx" accept=".gpx" class="cache">
+    <input type="file" id="fichier-gpx" accept=".gpx,.jpg,.jpeg,image/jpeg" multiple class="cache">
 
     <div id="bandeau-placement-manuel" class="bandeau-info cache">Touche la carte à l'endroit du coin à enregistrer</div>
 
@@ -225,6 +225,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

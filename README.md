@@ -48,7 +48,7 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 | Bouton | Fonction |
 |---|---|
 | 🍄+ (gros bouton) | Arme le mode "placement d'un point" : touche ensuite la carte à l'endroit exact du coin pour l'enregistrer |
-| 📂 GPX | Importe des points depuis un fichier GPX (export d'un GPS de randonnée, par exemple) |
+| Import | Importe des points depuis un fichier GPX **ou directement depuis des photos** (la position est extraite automatiquement des métadonnées EXIF de la photo, si la localisation était activée à la prise de vue — fonctionne avec des JPEG, pas avec les photos HEIC) |
 | 💾 | Télécharge une sauvegarde locale (fichier **GPX**, lisible par un GPS ou une appli de randonnée) de tous les points actuellement chargés — pratique "au cas où" |
 | ⬇️ | Télécharge les tuiles de la carte actuellement affichée (standard ou topo) pour la zone visible, utilisable ensuite sans réseau |
 | 🗑️ | Supprime les tuiles de carte téléchargées précédemment (libère de l'espace) |
@@ -65,7 +65,7 @@ Dans la fenêtre de détail d'un point, **touche le nom du champignon** pour le 
 En cliquant sur un coin, tu retrouves :
 - Son type (cliquable pour modifier), sa date et tes notes
 - Ses coordonnées exactes et son altitude
-- Un historique : qui l'a créé et quand, qui l'a modifié en dernier, combien de versions précédentes existent
+- Un historique complet : qui l'a créé et quand, et le détail de chaque modification passée (type, date, notes, auteur)
 - **Supprimer**
 - **🧭 Itinéraire** : propose de s'y rendre via Google Maps, Plans (Apple) ou Waze
 

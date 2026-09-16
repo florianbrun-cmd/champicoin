@@ -613,45 +613,112 @@ document.getElementById('btn-importer-gpx').addEventListener('click', () => {
   document.getElementById('fichier-gpx').click();
 });
 
+function lireExif(fichier) {
+  return new Promise((resolve) => {
+    try {
+      EXIF.getData(fichier, function () { resolve(this); });
+    } catch (err) {
+      resolve(null);
+    }
+  });
+}
+
+function dmsVersDecimal(dms, ref) {
+  if (!dms || dms.length < 3) return null;
+  let val = dms[0] + dms[1] / 60 + dms[2] / 3600;
+  if (ref === 'S' || ref === 'W') val = -val;
+  return val;
+}
+
+async function importerPhoto(fichier) {
+  const donnees = await lireExif(fichier);
+  if (!donnees) return null;
+  const lat = dmsVersDecimal(EXIF.getTag(donnees, 'GPSLatitude'), EXIF.getTag(donnees, 'GPSLatitudeRef'));
+  const lng = dmsVersDecimal(EXIF.getTag(donnees, 'GPSLongitude'), EXIF.getTag(donnees, 'GPSLongitudeRef'));
+  if (lat === null || lng === null) return null;
+
+  const altitudeExif = EXIF.getTag(donnees, 'GPSAltitude');
+  const dateExif = EXIF.getTag(donnees, 'DateTimeOriginal'); // format "AAAA:MM:JJ HH:MM:SS"
+  const dateFound = dateExif ? dateExif.slice(0, 10).replace(/:/g, '-') : new Date().toISOString().slice(0, 10);
+
+  return {
+    lat, lng, accuracy: null,
+    elevation: (altitudeExif !== undefined && altitudeExif !== null) ? altitudeExif : null,
+    mushroomType: 'Autres',
+    dateFound,
+    notes: `Importé depuis une photo (${fichier.name})`,
+    createdBy: getPseudo(),
+    clientId: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2)
+  };
+}
+
+function importerGpx(texte) {
+  const xml = new DOMParser().parseFromString(texte, 'application/xml');
+  const waypoints = Array.from(xml.querySelectorAll('wpt'));
+  return waypoints.map(wpt => {
+    const lat = parseFloat(wpt.getAttribute('lat'));
+    const lng = parseFloat(wpt.getAttribute('lon'));
+    if (isNaN(lat) || isNaN(lng)) return null;
+    const nomBalise = wpt.querySelector('name')?.textContent?.trim();
+    const dateBalise = wpt.querySelector('time')?.textContent?.trim();
+    const eleBalise = wpt.querySelector('ele')?.textContent?.trim();
+    return {
+      lat, lng, accuracy: null,
+      elevation: eleBalise ? parseFloat(eleBalise) : null,
+      mushroomType: nomBalise || 'Autres',
+      dateFound: dateBalise ? dateBalise.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      notes: 'Importé depuis un fichier GPX',
+      createdBy: getPseudo(),
+      clientId: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2)
+    };
+  }).filter(Boolean);
+}
+
 document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
-  const fichier = e.target.files[0];
-  if (!fichier) return;
+  const fichiers = Array.from(e.target.files || []);
+  if (fichiers.length === 0) return;
+
   try {
-    const texte = await fichier.text();
-    const xml = new DOMParser().parseFromString(texte, 'application/xml');
-    const waypoints = Array.from(xml.querySelectorAll('wpt'));
-    if (waypoints.length === 0) { alert('Aucun point trouvé dans ce fichier GPX.'); return; }
-    if (!confirm(`Importer ${waypoints.length} point(s) depuis ce fichier GPX ?`)) return;
+    let aImporter = [];
+    let photosSansGps = 0;
 
-    for (const wpt of waypoints) {
-      const lat = parseFloat(wpt.getAttribute('lat'));
-      const lng = parseFloat(wpt.getAttribute('lon'));
-      if (isNaN(lat) || isNaN(lng)) continue;
-      const nomBalise = wpt.querySelector('name')?.textContent?.trim();
-      const dateBalise = wpt.querySelector('time')?.textContent?.trim();
+    for (const fichier of fichiers) {
+      if (fichier.name.toLowerCase().endsWith('.gpx')) {
+        aImporter.push(...importerGpx(await fichier.text()));
+      } else if (fichier.type === 'image/jpeg' || /\.jpe?g$/i.test(fichier.name)) {
+        const point = await importerPhoto(fichier);
+        if (point) aImporter.push(point);
+        else photosSansGps++;
+      }
+    }
 
-      const nouveauPoint = {
-        lat, lng, accuracy: null,
-        mushroomType: nomBalise || 'Autres',
-        dateFound: dateBalise ? dateBalise.slice(0, 10) : new Date().toISOString().slice(0, 10),
-        notes: 'Importé depuis un fichier GPX',
-        createdBy: getPseudo(),
-        clientId: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2)
-      };
+    if (aImporter.length === 0) {
+      alert(photosSansGps > 0
+        ? 'Aucune coordonnée GPS trouvée dans ces photos. Vérifie que la localisation était activée lors de la prise de vue (et que ce ne sont pas des photos HEIC, non prises en charge).'
+        : 'Aucun point exploitable trouvé dans ces fichiers.');
+      return;
+    }
+
+    let message = `Importer ${aImporter.length} point(s) ?`;
+    if (photosSansGps > 0) message += ` (${photosSansGps} photo(s) sans position GPS ignorée(s))`;
+    if (!confirm(message)) return;
+
+    for (const nouveauPoint of aImporter) {
       tousLesPoints.push({ point: nouveauPoint, enAttente: true });
       await enregistrerPoint(nouveauPoint);
     }
     construireBarreFiltre();
     rafraichirAffichageCarte();
-    alert('Import terminé !');
+    afficherToast('Import terminé !');
   } catch (err) {
-    alert('Erreur lors de la lecture du fichier GPX.');
+    alert('Erreur lors de la lecture des fichiers.');
   } finally {
     e.target.value = '';
   }
 });
 
 // --- Formulaire (ajout / modification) ---
+
 
 document.getElementById('type-champignon').addEventListener('change', (e) => {
   const champAutre = document.getElementById('type-champignon-autre');
@@ -850,34 +917,45 @@ document.getElementById('btn-synchro-entete').addEventListener('click', () => sy
 document.getElementById('btn-nettoyer-doublons').addEventListener('click', async () => {
   if (!estEnLigne()) { alert('Une connexion internet est nécessaire pour nettoyer les doublons.'); return; }
 
-  const parCle = new Map();
+  const groupes = {};
   tousLesPoints.forEach(({ point }) => {
     if (!point._id) return; // on ignore les points pas encore synchronisés
     const cle = `${point.lat.toFixed(6)}_${point.lng.toFixed(6)}_${point.dateFound}`;
-    (parCle.get(cle) || parCle.set(cle, []).get(cle)).push(point);
+    if (!groupes[cle]) groupes[cle] = [];
+    groupes[cle].push(point);
   });
 
-  const aSupprimer = [];
-  parCle.forEach(points => {
-    if (points.length > 1) {
-      // On garde le premier (le plus ancien _id), on supprime le reste
-      const tries = [...points].sort((a, b) => (a._id > b._id ? 1 : -1));
-      aSupprimer.push(...tries.slice(1));
+  const idsASupprimer = [];
+  Object.values(groupes).forEach(points => {
+    if (points.length <= 1) return;
+    // Tri stable par _id pour toujours garder EXACTEMENT le même exemplaire (le premier),
+    // et n'ajouter à la liste de suppression que les autres.
+    const tries = points.slice().sort((a, b) => String(a._id).localeCompare(String(b._id)));
+    for (let i = 1; i < tries.length; i++) {
+      idsASupprimer.push(tries[i]._id);
     }
   });
 
-  if (aSupprimer.length === 0) {
+  // Filet de sécurité supplémentaire : jamais de doublon dans la liste d'IDs à supprimer,
+  // et on ne supprime jamais un ID qui apparaît aussi comme "à garder".
+  const idsGardes = new Set(Object.values(groupes).map(points => {
+    const tries = points.slice().sort((a, b) => String(a._id).localeCompare(String(b._id)));
+    return String(tries[0]._id);
+  }));
+  const idsUniques = [...new Set(idsASupprimer.map(String))].filter(id => !idsGardes.has(id));
+
+  if (idsUniques.length === 0) {
     afficherToast('Aucun doublon trouvé.');
     return;
   }
 
-  if (!confirm(`${aSupprimer.length} point(s) en double détecté(s) (même date et mêmes coordonnées exactes). Les supprimer définitivement ?`)) return;
+  if (!confirm(`${idsUniques.length} point(s) en double détecté(s) (même date et mêmes coordonnées exactes). Un exemplaire de chaque sera conservé. Continuer ?`)) return;
 
-  for (const point of aSupprimer) {
-    await fetch(`${API_BASE}/spots/${point._id}?groupCode=${encodeURIComponent(groupeCourant.code)}`, { method: 'DELETE' });
+  for (const id of idsUniques) {
+    await fetch(`${API_BASE}/spots/${id}?groupCode=${encodeURIComponent(groupeCourant.code)}`, { method: 'DELETE' });
   }
 
-  afficherToast(`${aSupprimer.length} doublon(s) supprimé(s).`);
+  afficherToast(`${idsUniques.length} doublon(s) supprimé(s).`);
   chargerPoints();
 });
 
@@ -1058,7 +1136,15 @@ function ajouterMarqueur(point, enAttente) {
     iconAnchor: [14, 14]
   });
   const marqueur = L.marker([point.lat, point.lng], { icon: icone }).addTo(coucheMarqueurs);
-  marqueur.on('click', () => afficherDetailPoint(point));
+  marqueur.on('click', () => {
+    if (modeAjoutManuel) {
+      positionTemporaire = { lat: point.lat, lng: point.lng, accuracy: null, manuel: true, elevation: point.elevation };
+      desactiverModeAjoutManuel();
+      ouvrirModalAjout();
+      return;
+    }
+    afficherDetailPoint(point);
+  });
 }
 
 function ajouterMarqueurZone(zone) {
@@ -1371,10 +1457,19 @@ function afficherDetailPoint(point) {
     zoneHistorique.appendChild(l);
   }
   if (point.history && point.history.length > 0) {
-    const l = document.createElement('div');
-    l.className = 'historique-entree';
-    l.textContent = `📜 ${point.history.length} version(s) précédente(s) de ce point`;
-    zoneHistorique.appendChild(l);
+    const titreHistorique = document.createElement('div');
+    titreHistorique.className = 'historique-titre';
+    titreHistorique.textContent = `📜 Historique complet (${point.history.length} version(s) précédente(s)) :`;
+    zoneHistorique.appendChild(titreHistorique);
+
+    // Les versions précédentes sont stockées de la plus ancienne à la plus récente ;
+    // on les affiche en ordre inverse (la plus récente d'abord), avant l'état actuel.
+    [...point.history].reverse().forEach((version, i) => {
+      const l = document.createElement('div');
+      l.className = 'historique-entree historique-version';
+      l.innerHTML = `<b>${version.mushroomType}</b> — ${formaterDate(version.dateFound)}${version.notes ? ` — "${version.notes}"` : ''}<br>modifié le ${formaterDateHeure(version.updatedAt)} par ${version.updatedBy || 'inconnu'}`;
+      zoneHistorique.appendChild(l);
+    });
   }
 
   document.getElementById('btn-supprimer-point').onclick = async () => {

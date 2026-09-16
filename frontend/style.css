@@ -985,6 +985,19 @@ html, body {
   text-decoration: underline dotted;
 }
 
+.historique-titre {
+  font-weight: 600;
+  color: #555;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+.historique-version {
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid #eee;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
 .marqueur-productif {
   box-shadow: 0 0 0 3px #f0b429, 0 1px 5px rgba(0,0,0,0.4) !important;
 }
