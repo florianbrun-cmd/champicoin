@@ -998,6 +998,17 @@ html, body {
   font-size: 12px;
 }
 
+.btn-retour-zone {
+  background: none;
+  border: none;
+  color: #3d5a35;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 0 10px;
+  cursor: pointer;
+  display: block;
+}
+
 .marqueur-productif {
   box-shadow: 0 0 0 3px #f0b429, 0 1px 5px rgba(0,0,0,0.4) !important;
 }

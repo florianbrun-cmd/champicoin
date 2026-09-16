@@ -877,39 +877,47 @@ function ajouterAFileDAttente(point) {
   mettreAJourBadgeAttente();
 }
 
+let synchronisationEnCours = false;
+
 async function synchroniserPointsEnAttente(silencieux) {
   if (!groupeCourant) return;
+  if (synchronisationEnCours) return; // une synchro est déjà en cours : on évite un envoi en double
   if (!estEnLigne()) {
     if (!silencieux) alert(modeAvionForce ? 'Désactive le mode avion pour synchroniser.' : 'Toujours hors-ligne : impossible de synchroniser pour le moment.');
     return;
   }
 
-  const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
+  synchronisationEnCours = true;
+  try {
+    const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
 
-  if (file.length > 0) {
-    const restants = [];
-    for (const point of file) {
-      try {
-        const reponse = await fetch(`${API_BASE}/spots`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...point, groupCode: groupeCourant.code, author: point.createdBy || getPseudo() })
-        });
-        if (!reponse.ok) restants.push(point);
-      } catch (err) {
-        restants.push(point);
+    if (file.length > 0) {
+      const restants = [];
+      for (const point of file) {
+        try {
+          const reponse = await fetch(`${API_BASE}/spots`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...point, groupCode: groupeCourant.code, author: point.createdBy || getPseudo() })
+          });
+          if (!reponse.ok) restants.push(point);
+        } catch (err) {
+          restants.push(point);
+        }
       }
+      localStorage.setItem('champicoin_file_attente', JSON.stringify(restants));
+      mettreAJourBadgeAttente();
+    } else if (!silencieux) {
+      afficherToast('Tout est déjà à jour.');
     }
-    localStorage.setItem('champicoin_file_attente', JSON.stringify(restants));
-    mettreAJourBadgeAttente();
-  } else if (!silencieux) {
-    afficherToast('Tout est déjà à jour.');
-  }
 
-  // Rafraîchissement systématique de la carte, qu'il y ait eu quelque chose à
-  // synchroniser ou non : garantit qu'un point déjà synchronisé plus tôt ne
-  // reste jamais affiché avec un sablier obsolète.
-  await chargerPoints();
-  rafraichirAffichageCarte();
+    // Rafraîchissement systématique de la carte, qu'il y ait eu quelque chose à
+    // synchroniser ou non : garantit qu'un point déjà synchronisé plus tôt ne
+    // reste jamais affiché avec un sablier obsolète.
+    await chargerPoints();
+    rafraichirAffichageCarte();
+  } finally {
+    synchronisationEnCours = false;
+  }
 }
 
 document.getElementById('btn-synchro-entete').addEventListener('click', () => synchroniserPointsEnAttente(false));
@@ -917,39 +925,51 @@ document.getElementById('btn-synchro-entete').addEventListener('click', () => sy
 document.getElementById('btn-nettoyer-doublons').addEventListener('click', async () => {
   if (!estEnLigne()) { alert('Une connexion internet est nécessaire pour nettoyer les doublons.'); return; }
 
-  const groupes = {};
+  const DISTANCE_DOUBLON_M = 5;
+
+  // On ne compare qu'entre points de même type et même date (comme dans la fenêtre de zone),
+  // puis on regroupe ceux à moins de 5 m les uns des autres : de vrais doublons ont rarement
+  // des coordonnées identiques au bit près (positions tapées séparément), mais sont très proches.
+  const parTypeEtDate = {};
   tousLesPoints.forEach(({ point }) => {
     if (!point._id) return; // on ignore les points pas encore synchronisés
-    const cle = `${point.lat.toFixed(6)}_${point.lng.toFixed(6)}_${point.dateFound}`;
-    if (!groupes[cle]) groupes[cle] = [];
-    groupes[cle].push(point);
+    const cle = `${point.mushroomType}|${point.dateFound}`;
+    if (!parTypeEtDate[cle]) parTypeEtDate[cle] = [];
+    parTypeEtDate[cle].push(point);
   });
 
   const idsASupprimer = [];
-  Object.values(groupes).forEach(points => {
+  Object.values(parTypeEtDate).forEach(points => {
     if (points.length <= 1) return;
-    // Tri stable par _id pour toujours garder EXACTEMENT le même exemplaire (le premier),
-    // et n'ajouter à la liste de suppression que les autres.
-    const tries = points.slice().sort((a, b) => String(a._id).localeCompare(String(b._id)));
-    for (let i = 1; i < tries.length; i++) {
-      idsASupprimer.push(tries[i]._id);
+
+    // Regroupement par proximité (< 5 m), même logique qu'un union-find simple
+    const n = points.length;
+    const parent = Array.from({ length: n }, (_, i) => i);
+    function find(i) { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; }
+    function union(a, b) { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; }
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        if (distanceMetres(points[i].lat, points[i].lng, points[j].lat, points[j].lng) < DISTANCE_DOUBLON_M) union(i, j);
+      }
     }
+    const groupes = {};
+    for (let i = 0; i < n; i++) { const r = find(i); (groupes[r] = groupes[r] || []).push(points[i]); }
+
+    Object.values(groupes).forEach(groupe => {
+      if (groupe.length <= 1) return;
+      const tries = groupe.slice().sort((a, b) => String(a._id).localeCompare(String(b._id)));
+      for (let i = 1; i < tries.length; i++) idsASupprimer.push(String(tries[i]._id));
+    });
   });
 
-  // Filet de sécurité supplémentaire : jamais de doublon dans la liste d'IDs à supprimer,
-  // et on ne supprime jamais un ID qui apparaît aussi comme "à garder".
-  const idsGardes = new Set(Object.values(groupes).map(points => {
-    const tries = points.slice().sort((a, b) => String(a._id).localeCompare(String(b._id)));
-    return String(tries[0]._id);
-  }));
-  const idsUniques = [...new Set(idsASupprimer.map(String))].filter(id => !idsGardes.has(id));
+  const idsUniques = [...new Set(idsASupprimer)];
 
   if (idsUniques.length === 0) {
     afficherToast('Aucun doublon trouvé.');
     return;
   }
 
-  if (!confirm(`${idsUniques.length} point(s) en double détecté(s) (même date et mêmes coordonnées exactes). Un exemplaire de chaque sera conservé. Continuer ?`)) return;
+  if (!confirm(`${idsUniques.length} point(s) en double détecté(s) (même type, même date, à moins de ${DISTANCE_DOUBLON_M} m). Un exemplaire de chaque sera conservé. Continuer ?`)) return;
 
   for (const id of idsUniques) {
     await fetch(`${API_BASE}/spots/${id}?groupCode=${encodeURIComponent(groupeCourant.code)}`, { method: 'DELETE' });
@@ -1170,6 +1190,7 @@ function ajouterMarqueurZone(zone) {
 }
 
 function afficherZone(zone) {
+  derniereZoneAffichee = zone;
   // Regroupe les coins du même type au sein de la zone, mais liste chaque coordonnée
   // individuellement : le marqueur de zone est une MOYENNE des positions, pas la position
   // réelle d'un point précis — la liste ci-dessous permet de vérifier chaque coordonnée exacte.
@@ -1207,7 +1228,7 @@ function afficherZone(zone) {
       const entrees = groupesTries[parseInt(el.dataset.groupe, 10)];
       const point = entrees[parseInt(el.dataset.sous, 10)].point;
       document.getElementById('modal-zone').classList.add('cache');
-      afficherDetailPoint(point);
+      afficherDetailPoint(point, true);
     });
   });
   document.getElementById('modal-zone').classList.remove('cache');
@@ -1430,13 +1451,21 @@ function formaterDateHeure(dateStr) {
 }
 
 let pointActuellementAffiche = null;
+let derniereZoneAffichee = null;
 
-function afficherDetailPoint(point) {
+function afficherDetailPoint(point, depuisZone) {
   pointActuellementAffiche = point;
   const zoneType = document.getElementById('detail-type');
   zoneType.innerHTML = `${htmlIcone(point.mushroomType)} ${point.mushroomType}`;
   zoneType.className = point._id ? 'detail-type-cliquable' : '';
   zoneType.onclick = point._id ? () => ouvrirModalModification(point) : null;
+
+  const btnRetour = document.getElementById('btn-retour-zone');
+  btnRetour.classList.toggle('cache', !depuisZone);
+  btnRetour.onclick = () => {
+    document.getElementById('modal-detail').classList.add('cache');
+    if (derniereZoneAffichee) afficherZone(derniereZoneAffichee);
+  };
 
   document.getElementById('detail-date').textContent = formaterDate(point.dateFound);
   document.getElementById('detail-notes').textContent = point.notes || '';
