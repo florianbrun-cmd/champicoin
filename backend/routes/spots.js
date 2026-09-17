@@ -38,6 +38,17 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Position et type de champignon requis.' });
     }
 
+    // Idempotence : si ce clientId a déjà été enregistré pour ce groupe (retransmission,
+    // synchro en double, plusieurs onglets...), on renvoie le point existant plutôt que
+    // d'en créer un doublon. C'est la protection la plus fiable contre les doublons, car
+    // elle tient quelle que soit la cause côté navigateur.
+    if (clientId) {
+      const dejaExistant = await Spot.findOne({ groupCode: groupe.code, clientId });
+      if (dejaExistant) {
+        return res.json({ spot: dejaExistant });
+      }
+    }
+
     const maintenant = new Date();
 
     const spot = await Spot.create({
@@ -58,6 +69,12 @@ router.post('/', async (req, res) => {
 
     res.json({ spot });
   } catch (erreur) {
+    if (erreur.code === 11000) {
+      // Conflit avec l'index unique (deux requêtes quasi simultanées pour le même point,
+      // même clientId) : ce n'est pas une vraie erreur, on renvoie le point déjà créé.
+      const spotExistant = await Spot.findOne({ groupCode: req.body.groupCode, clientId: req.body.clientId });
+      if (spotExistant) return res.json({ spot: spotExistant });
+    }
     console.error(erreur);
     res.status(500).json({ error: 'Erreur serveur.' });
   }

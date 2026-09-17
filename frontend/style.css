@@ -464,9 +464,11 @@ html, body {
   width: 18px;
   height: 18px;
   font-size: 13px;
-  line-height: 18px;
-  text-align: center;
   border: 2px solid white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .bandeau-info {

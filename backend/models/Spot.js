@@ -29,4 +29,12 @@ const spotSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// Dernier rempart contre les doublons, au niveau de la base elle-même : deux requêtes
+// simultanées avec le même clientId (même point) ne peuvent jamais aboutir à deux documents.
+// Le filtre partiel exclut les anciens points sans clientId (qui restent tous à null).
+spotSchema.index(
+  { groupCode: 1, clientId: 1 },
+  { unique: true, partialFilterExpression: { clientId: { $type: 'string' } } }
+);
+
 module.exports = mongoose.model('Spot', spotSchema);

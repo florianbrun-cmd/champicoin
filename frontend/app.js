@@ -1120,7 +1120,7 @@ function ajusterVueAuxPointsFiltres() {
 
 // --- Regroupement en "zones" à faible/moyen zoom : coins trop proches à l'écran ---
 const RAYON_CLUSTER_PIXELS = 40; // distance à l'écran, indépendante du zoom : fusion sous ce seuil
-const ZOOM_SANS_REGROUPEMENT = 19; // au dernier niveau de zoom (~20 m), plus aucune fusion : tout s'affiche
+const ZOOM_SANS_REGROUPEMENT = 18; // dès une échelle d'environ 50 m, plus aucune fusion : tout s'affiche
 
 function calculerZones(pointsAvecMeta) {
   const n = pointsAvecMeta.length;
