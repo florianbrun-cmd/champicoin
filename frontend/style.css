@@ -235,21 +235,6 @@ html, body {
   width: 100%;
 }
 
-.btn-flottant {
-  position: absolute;
-  bottom: 30px;
-  right: 20px;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background: #e8871e;
-  border: none;
-  font-size: 26px;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
-  cursor: pointer;
-  z-index: 500;
-}
-
 .badge-attente {
   position: absolute;
   top: 70px;
@@ -462,7 +447,11 @@ html, body {
 
 .icone-champi-plus {
   position: relative;
-  display: inline-block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .badge-plus {

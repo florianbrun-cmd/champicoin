@@ -339,7 +339,8 @@ function initCarte() {
   });
 
   coucheTopo = L.tileLayer('https://a.tile.opentopomap.org/{z}/{x}/{y}.png', {
-    maxZoom: 17,
+    maxZoom: 19,
+    maxNativeZoom: 17,
     attribution: '&copy; contributeurs OpenStreetMap, SRTM — style © OpenTopoMap (CC-BY-SA)'
   });
 
@@ -971,9 +972,17 @@ document.getElementById('btn-nettoyer-doublons').addEventListener('click', async
 
   if (!confirm(`${idsUniques.length} point(s) en double détecté(s) (même type, même date, à moins de ${DISTANCE_DOUBLON_M} m). Un exemplaire de chaque sera conservé. Continuer ?`)) return;
 
-  for (const id of idsUniques) {
-    await fetch(`${API_BASE}/spots/${id}?groupCode=${encodeURIComponent(groupeCourant.code)}`, { method: 'DELETE' });
+  const bouton = document.getElementById('btn-nettoyer-doublons');
+  const titreInitial = bouton.title;
+  const taillePaquet = 10;
+  for (let i = 0; i < idsUniques.length; i += taillePaquet) {
+    const paquet = idsUniques.slice(i, i + taillePaquet);
+    await Promise.all(paquet.map(id =>
+      fetch(`${API_BASE}/spots/${id}?groupCode=${encodeURIComponent(groupeCourant.code)}`, { method: 'DELETE' }).catch(() => {})
+    ));
+    bouton.title = `Suppression... ${Math.min(i + taillePaquet, idsUniques.length)}/${idsUniques.length}`;
   }
+  bouton.title = titreInitial;
 
   afficherToast(`${idsUniques.length} doublon(s) supprimé(s).`);
   chargerPoints();
@@ -1010,7 +1019,14 @@ async function chargerPoints() {
     try {
       const reponse = await fetch(`${API_BASE}/spots?groupCode=${encodeURIComponent(groupeCourant.code)}`);
       const data = await reponse.json();
-      (data.spots || []).forEach(spot => tousLesPoints.push({ point: spot, enAttente: false }));
+      const idsVus = new Set();
+      (data.spots || []).forEach(spot => {
+        if (spot._id) {
+          if (idsVus.has(spot._id)) return; // sécurité : jamais deux fois le même point affiché
+          idsVus.add(spot._id);
+        }
+        tousLesPoints.push({ point: spot, enAttente: false });
+      });
     } catch (err) {
       console.warn('Impossible de charger les points depuis le serveur.');
     }
@@ -1079,34 +1095,6 @@ function calculerPointsFiltres() {
   });
 }
 
-// --- Regroupement en "zones" : coins distants de moins de DISTANCE_ZONE_M ---
-const RAYON_CLUSTER_PIXELS = 40; // distance à l'écran, indépendante du zoom : fusion sous ce seuil
-
-function calculerZones(pointsAvecMeta) {
-  const n = pointsAvecMeta.length;
-  const parent = Array.from({ length: n }, (_, i) => i);
-  function find(i) { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; }
-  function union(a, b) { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; }
-
-  // Distance à l'écran (en pixels) à l'échelle actuelle : plus on zoome, plus les points
-  // s'écartent visuellement, jusqu'à dépasser le seuil et se séparer automatiquement.
-  const pointsEcran = pointsAvecMeta.map(({ point }) => carte.latLngToContainerPoint([point.lat, point.lng]));
-
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const dx = pointsEcran[i].x - pointsEcran[j].x;
-      const dy = pointsEcran[i].y - pointsEcran[j].y;
-      if (Math.sqrt(dx * dx + dy * dy) < RAYON_CLUSTER_PIXELS) union(i, j);
-    }
-  }
-  const groupes = {};
-  for (let i = 0; i < n; i++) {
-    const r = find(i);
-    (groupes[r] = groupes[r] || []).push(pointsAvecMeta[i]);
-  }
-  return Object.values(groupes);
-}
-
 function filtresActifs() {
   return typesFiltreActifs.size > 0 || moisFiltreActifs.size > 0 || departementsFiltreActifs.size > 0 ||
     rechercheFiltre.value.trim() !== '';
@@ -1130,17 +1118,49 @@ function ajusterVueAuxPointsFiltres() {
   }
 }
 
+// --- Regroupement en "zones" à faible/moyen zoom : coins trop proches à l'écran ---
+const RAYON_CLUSTER_PIXELS = 40; // distance à l'écran, indépendante du zoom : fusion sous ce seuil
+const ZOOM_SANS_REGROUPEMENT = 19; // au dernier niveau de zoom (~20 m), plus aucune fusion : tout s'affiche
+
+function calculerZones(pointsAvecMeta) {
+  const n = pointsAvecMeta.length;
+  const parent = Array.from({ length: n }, (_, i) => i);
+  function find(i) { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; }
+  function union(a, b) { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; }
+
+  const pointsEcran = pointsAvecMeta.map(({ point }) => carte.latLngToContainerPoint([point.lat, point.lng]));
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dx = pointsEcran[i].x - pointsEcran[j].x;
+      const dy = pointsEcran[i].y - pointsEcran[j].y;
+      if (Math.sqrt(dx * dx + dy * dy) < RAYON_CLUSTER_PIXELS) union(i, j);
+    }
+  }
+  const groupes = {};
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    (groupes[r] = groupes[r] || []).push(pointsAvecMeta[i]);
+  }
+  return Object.values(groupes);
+}
+
 function rafraichirAffichageCarte() {
   coucheMarqueurs.clearLayers();
   const pointsFiltres = calculerPointsFiltres();
-  const zones = calculerZones(pointsFiltres);
-  zones.forEach(zone => {
-    if (zone.length === 1) {
-      ajouterMarqueur(zone[0].point, zone[0].enAttente);
-    } else {
-      ajouterMarqueurZone(zone);
-    }
-  });
+
+  if (carte.getZoom() >= ZOOM_SANS_REGROUPEMENT) {
+    // Dernier niveau de zoom : on affiche chaque point individuellement, même très proches
+    pointsFiltres.forEach(({ point, enAttente }) => ajouterMarqueur(point, enAttente));
+  } else {
+    calculerZones(pointsFiltres).forEach(zone => {
+      if (zone.length === 1) {
+        ajouterMarqueur(zone[0].point, zone[0].enAttente);
+      } else {
+        ajouterMarqueurZone(zone);
+      }
+    });
+  }
 
   if (!panneauListe.classList.contains('cache')) construireListe();
 }

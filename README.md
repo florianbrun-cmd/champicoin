@@ -39,8 +39,8 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 - **Point bleu** : ta position en direct ; une petite flèche indique la direction de ton déplacement si le téléphone la détecte
 - **Icônes de champignon** : chaque coin enregistré, avec une icône propre à chaque espèce
 - **Icône avec un ⏳** : ce point n'est pas encore synchronisé avec le serveur (créé hors-ligne, en attente de réseau)
-- **Halo doré** : un point (ou une zone) régulièrement réactualisé au fil des années — repère rapide d'un coin productif
-- **Pastille numérotée** : plusieurs coins trop proches à ce niveau de zoom sont regroupés (le gros chiffre = nombre de coins, le petit badge = nombre de types différents). Zoome pour les séparer automatiquement ; dézoome pour les regrouper
+- **Halo doré** : un point régulièrement réactualisé au fil des années — repère rapide d'un coin productif
+- **Pastille numérotée** : plusieurs coins trop proches à ce niveau de zoom sont regroupés (le gros chiffre = nombre de coins, le petit badge = nombre de types différents). Zoome pour les séparer ; au dernier niveau de zoom (~20 m), tous les points s'affichent toujours individuellement, même très rapprochés
 - **Échelle** : en bas à gauche, indique la distance réelle représentée sur la carte
 - Fond de carte **avec courbes de niveau (relief)** affiché par défaut ; bascule automatiquement vers un fond simplifié si une connexion lente est détectée
 
