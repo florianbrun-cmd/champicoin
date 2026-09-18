@@ -172,7 +172,7 @@ document.getElementById('form-creer').addEventListener('submit', async (e) => {
   }
 });
 
-function entrerDansGroupe(groupe) {
+async function entrerDansGroupe(groupe) {
   groupeCourant = groupe;
   localStorage.setItem('champicoin_groupe', JSON.stringify(groupe));
   nomGroupeActif.textContent = groupe.name;
@@ -180,8 +180,8 @@ function entrerDansGroupe(groupe) {
   ecranGroupe.classList.add('cache');
   ecranCarte.classList.remove('cache');
   initCarte();
-  chargerPoints();
-  synchroniserPointsEnAttente(true);
+  await chargerPoints();
+  await synchroniserPointsEnAttente(true);
   signalerPresence();
 
   if (modeAvionForce) {
@@ -632,7 +632,25 @@ function dmsVersDecimal(dms, ref) {
 }
 
 async function importerPhoto(fichier) {
-  const donnees = await lireExif(fichier);
+  let imageBlob = fichier;
+  const estHeic = f => f.type === 'image/heic' || f.type === 'image/heif' || /\.heic$/i.test(f.name);
+
+  // Les photos HEIC (format par défaut sur iPhone) ne sont pas lisibles directement par
+  // exif-js : on les convertit d'abord en JPEG via heic2any, si la librairie est chargée.
+  if (estHeic(fichier)) {
+    if (window.heic2any) {
+      try {
+        const resultat = await heic2any({ blob: fichier, toType: 'image/jpeg', quality: 0.8 });
+        imageBlob = Array.isArray(resultat) ? resultat[0] : resultat;
+      } catch (err) {
+        return null;
+      }
+    } else {
+      return null;
+    }
+  }
+
+  const donnees = await lireExif(imageBlob);
   if (!donnees) return null;
   const lat = dmsVersDecimal(EXIF.getTag(donnees, 'GPSLatitude'), EXIF.getTag(donnees, 'GPSLatitudeRef'));
   const lng = dmsVersDecimal(EXIF.getTag(donnees, 'GPSLongitude'), EXIF.getTag(donnees, 'GPSLongitudeRef'));
@@ -686,7 +704,7 @@ document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
     for (const fichier of fichiers) {
       if (fichier.name.toLowerCase().endsWith('.gpx')) {
         aImporter.push(...importerGpx(await fichier.text()));
-      } else if (fichier.type === 'image/jpeg' || /\.jpe?g$/i.test(fichier.name)) {
+      } else if (fichier.type === 'image/jpeg' || /\.jpe?g$/i.test(fichier.name) || fichier.type === 'image/heic' || fichier.type === 'image/heif' || /\.heic$/i.test(fichier.name)) {
         const point = await importerPhoto(fichier);
         if (point) aImporter.push(point);
         else photosSansGps++;
@@ -695,7 +713,7 @@ document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
 
     if (aImporter.length === 0) {
       alert(photosSansGps > 0
-        ? 'Aucune coordonnée GPS trouvée dans ces photos. Vérifie que la localisation était activée lors de la prise de vue (et que ce ne sont pas des photos HEIC, non prises en charge).'
+        ? 'Aucune coordonnée GPS trouvée dans ces photos. Vérifie que la localisation était activée lors de la prise de vue.'
         : 'Aucun point exploitable trouvé dans ces fichiers.');
       return;
     }
