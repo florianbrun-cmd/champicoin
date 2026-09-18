@@ -228,8 +228,11 @@
   <div id="modal-archives" class="modal cache">
     <div class="modal-contenu">
       <h2>🗄️ Points archivés</h2>
-      <p class="note-membres">Ces points ont été masqués de la carte (généralement via le nettoyage des doublons), mais jamais supprimés. Tu peux les restaurer à tout moment.</p>
+      <p class="note-membres">Ces points ont été masqués de la carte (généralement via le nettoyage des doublons), mais jamais supprimés. Tu peux les restaurer à tout moment. Un point archivé depuis plus de 3 mois est supprimé automatiquement.</p>
       <div id="contenu-archives"></div>
+      <div class="modal-actions">
+        <button type="button" id="btn-purger-archives" class="btn-danger">Purger maintenant (+3 mois)</button>
+      </div>
     </div>
   </div>
 

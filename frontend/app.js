@@ -1075,6 +1075,30 @@ document.getElementById('btn-archives').addEventListener('click', async () => {
   }
 });
 
+document.getElementById('btn-purger-archives').addEventListener('click', async () => {
+  if (!estEnLigne()) { alert('Une connexion internet est nécessaire pour purger.'); return; }
+  if (!confirm('Supprimer définitivement tous les points archivés depuis plus de 3 mois ? Cette action est irréversible (contrairement à l\'archivage).')) return;
+
+  const bouton = document.getElementById('btn-purger-archives');
+  bouton.disabled = true;
+  bouton.textContent = 'Purge en cours...';
+  try {
+    const reponse = await fetch(`${API_BASE}/spots/purge`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupCode: groupeCourant.code })
+    });
+    const data = await reponse.json();
+    if (!reponse.ok) { alert(data.error || 'Erreur lors de la purge.'); return; }
+    afficherToast(`${data.supprimes} point(s) définitivement supprimé(s).`);
+    document.getElementById('btn-archives').click(); // rafraîchit la liste affichée
+  } catch (err) {
+    alert('Erreur réseau, réessaie plus tard.');
+  } finally {
+    bouton.disabled = false;
+    bouton.textContent = 'Purger maintenant (+3 mois)';
+  }
+});
+
 document.getElementById('btn-nettoyer-doublons').addEventListener('click', async () => {
   if (!estEnLigne()) { alert('Une connexion internet est nécessaire pour nettoyer les doublons.'); return; }
 

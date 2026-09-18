@@ -3,6 +3,7 @@
 // Chaque point est rattaché à un groupCode : seuls les membres du groupe le voient.
 
 const express = require('express');
+const { executerPurge } = require('../purge');
 const router = express.Router();
 const Spot = require('../models/Spot');
 const Group = require('../models/Group');
@@ -238,6 +239,22 @@ router.patch('/:id/archive', async (req, res) => {
     );
     if (!spot) return res.status(404).json({ error: 'Point introuvable.' });
     res.json({ spot });
+  } catch (erreur) {
+    console.error(erreur);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// Déclenche immédiatement la purge des points archivés depuis plus de 3 mois
+// (au lieu d'attendre la vérification automatique quotidienne/trimestrielle).
+router.post('/purge', async (req, res) => {
+  try {
+    const { groupCode } = req.body;
+    const groupe = await verifierGroupe(groupCode);
+    if (!groupe) return res.status(403).json({ error: 'Code de groupe invalide.' });
+
+    const supprimes = await executerPurge();
+    res.json({ supprimes });
   } catch (erreur) {
     console.error(erreur);
     res.status(500).json({ error: 'Erreur serveur.' });

@@ -13,23 +13,29 @@ const PurgeLog = require('./models/PurgeLog');
 const TROIS_MOIS_MS = 90 * 24 * 60 * 60 * 1000;
 const VERIF_QUOTIDIENNE_MS = 24 * 60 * 60 * 1000;
 
+// Supprime définitivement les points archivés créés il y a plus de 3 mois, et met à
+// jour la date de dernière purge (utilisée aussi bien en manuel qu'en automatique).
+async function executerPurge() {
+  const seuil = new Date(Date.now() - TROIS_MOIS_MS);
+  const resultat = await Spot.deleteMany({ archive: true, createdAt: { $lt: seuil } });
+
+  let log = await PurgeLog.findOne({ cle: 'purge_archives' });
+  if (!log) log = await PurgeLog.create({ cle: 'purge_archives' });
+  log.dernierePurgeAt = new Date();
+  log.dernierNombreSupprime = resultat.deletedCount || 0;
+  await log.save();
+
+  return resultat.deletedCount || 0;
+}
+
 async function verifierEtPurgerSiNecessaire() {
   try {
-    let log = await PurgeLog.findOne({ cle: 'purge_archives' });
-    if (!log) log = await PurgeLog.create({ cle: 'purge_archives' });
+    const log = await PurgeLog.findOne({ cle: 'purge_archives' });
+    const derniereFois = log && log.dernierePurgeAt ? log.dernierePurgeAt.getTime() : 0;
+    if (Date.now() - derniereFois < TROIS_MOIS_MS) return; // pas encore l'heure
 
-    const maintenant = Date.now();
-    const derniereFois = log.dernierePurgeAt ? log.dernierePurgeAt.getTime() : 0;
-    if (maintenant - derniereFois < TROIS_MOIS_MS) return; // pas encore l'heure
-
-    const seuil = new Date(maintenant - TROIS_MOIS_MS);
-    const resultat = await Spot.deleteMany({ archive: true, createdAt: { $lt: seuil } });
-
-    log.dernierePurgeAt = new Date();
-    log.dernierNombreSupprime = resultat.deletedCount || 0;
-    await log.save();
-
-    console.log(`🧹 Purge trimestrielle : ${resultat.deletedCount || 0} point(s) archivé(s) depuis plus de 3 mois supprimé(s) définitivement.`);
+    const nb = await executerPurge();
+    console.log(`🧹 Purge trimestrielle automatique : ${nb} point(s) archivé(s) depuis plus de 3 mois supprimé(s) définitivement.`);
   } catch (erreur) {
     console.error('Erreur lors de la purge trimestrielle :', erreur);
   }
@@ -40,4 +46,4 @@ function demarrerPurgeAutomatique() {
   setInterval(verifierEtPurgerSiNecessaire, VERIF_QUOTIDIENNE_MS); // puis une fois par jour
 }
 
-module.exports = { demarrerPurgeAutomatique, verifierEtPurgerSiNecessaire };
+module.exports = { demarrerPurgeAutomatique, verifierEtPurgerSiNecessaire, executerPurge };
