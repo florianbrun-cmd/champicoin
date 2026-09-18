@@ -742,15 +742,39 @@ document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
     if (photosSansGps > 0) message += ` (${photosSansGps} photo(s) sans position GPS ignorée(s))`;
     if (!confirm(message)) { zoneProgression.classList.add('cache'); return; }
 
-    for (let i = 0; i < aImporter.length; i++) {
-      const nouveauPoint = aImporter[i];
-      majProgression(`Enregistrement... ${i + 1}/${aImporter.length}`, 0.5 + ((i + 1) / aImporter.length) / 2);
-      tousLesPoints.push({ point: nouveauPoint, enAttente: true });
-      await enregistrerPoint(nouveauPoint);
+    if (estEnLigne()) {
+      const TAILLE_LOT = 200;
+      let totalInseres = 0;
+      let totalDoublons = 0;
+      for (let i = 0; i < aImporter.length; i += TAILLE_LOT) {
+        const lot = aImporter.slice(i, i + TAILLE_LOT);
+        const fait = Math.min(i + TAILLE_LOT, aImporter.length);
+        majProgression(`Enregistrement... ${fait}/${aImporter.length}`, 0.5 + (fait / aImporter.length) / 2);
+        try {
+          const reponse = await fetch(`${API_BASE}/spots/bulk`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              groupCode: groupeCourant.code,
+              points: lot.map(p => ({ ...p, author: getPseudo() }))
+            })
+          });
+          const data = await reponse.json();
+          totalInseres += data.inseres || 0;
+          totalDoublons += data.doublons || 0;
+        } catch (err) {
+          // Ce lot n'est pas passé (réseau coupé en cours d'import) : on le met en
+          // attente locale comme un ajout hors-ligne classique, rien n'est perdu.
+          lot.forEach(p => ajouterAFileDAttente(p));
+        }
+      }
+      await chargerPoints();
+      afficherToast(totalDoublons > 0 ? `Import terminé : ${totalInseres} point(s) (${totalDoublons} déjà existant(s) ignoré(s)).` : 'Import terminé !');
+    } else {
+      aImporter.forEach(p => ajouterAFileDAttente(p));
+      construireBarreFiltre();
+      rafraichirAffichageCarte();
+      afficherToast('Import terminé (en attente de réseau pour synchroniser).');
     }
-    if (estEnLigne()) await chargerPoints();
-    else { construireBarreFiltre(); rafraichirAffichageCarte(); }
-    afficherToast('Import terminé !');
   } catch (err) {
     alert('Erreur lors de la lecture des fichiers.');
   } finally {

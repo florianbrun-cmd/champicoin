@@ -173,4 +173,52 @@ router.patch('/:id/elevation', async (req, res) => {
   }
 });
 
+// Import groupé : reçoit un lot de points en une seule requête, bien plus rapide que
+// de les envoyer un par un (utile pour un import GPX/photos de plusieurs centaines de points).
+router.post('/bulk', async (req, res) => {
+  try {
+    const { groupCode, points } = req.body;
+    const groupe = await verifierGroupe(groupCode);
+    if (!groupe) return res.status(403).json({ error: 'Code de groupe invalide.' });
+    if (!Array.isArray(points) || points.length === 0) {
+      return res.status(400).json({ error: 'Aucun point à importer.' });
+    }
+
+    const maintenant = new Date();
+    const documents = points
+      .filter(p => p.lat !== undefined && p.lng !== undefined && p.mushroomType)
+      .map(p => ({
+        groupCode: groupe.code,
+        lat: p.lat,
+        lng: p.lng,
+        accuracy: (p.accuracy === undefined || p.accuracy === null) ? null : p.accuracy,
+        elevation: (p.elevation === undefined || p.elevation === null) ? null : p.elevation,
+        mushroomType: p.mushroomType,
+        icon: p.icon || '🍄',
+        dateFound: p.dateFound || maintenant.toISOString().slice(0, 10),
+        notes: p.notes || '',
+        clientId: p.clientId || null,
+        createdBy: p.author || '',
+        updatedBy: p.author || '',
+        updatedAt: maintenant
+      }));
+
+    let inseres = [];
+    let doublons = 0;
+    try {
+      inseres = await Spot.insertMany(documents, { ordered: false });
+    } catch (erreurBulk) {
+      // Avec ordered:false, un document en conflit avec l'index unique (clientId déjà connu)
+      // échoue individuellement sans bloquer les autres : Mongoose renvoie ceux qui ont réussi.
+      inseres = erreurBulk.insertedDocs || [];
+      doublons = documents.length - inseres.length;
+    }
+
+    res.json({ inseres: inseres.length, doublons });
+  } catch (erreur) {
+    console.error(erreur);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
 module.exports = router;
