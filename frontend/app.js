@@ -697,11 +697,23 @@ document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
   const fichiers = Array.from(e.target.files || []);
   if (fichiers.length === 0) return;
 
+  const zoneProgression = document.getElementById('progression-import');
+  const texteProgression = document.getElementById('progression-import-texte');
+  const barreProgression = document.getElementById('progression-import-barre');
+
+  function majProgression(texte, ratio) {
+    zoneProgression.classList.remove('cache');
+    texteProgression.textContent = texte;
+    barreProgression.style.width = `${Math.round(ratio * 100)}%`;
+  }
+
   try {
     let aImporter = [];
     let photosSansGps = 0;
 
-    for (const fichier of fichiers) {
+    for (let i = 0; i < fichiers.length; i++) {
+      const fichier = fichiers[i];
+      majProgression(`Lecture des fichiers... ${i + 1}/${fichiers.length}`, (i + 1) / fichiers.length / 2);
       if (fichier.name.toLowerCase().endsWith('.gpx')) {
         aImporter.push(...importerGpx(await fichier.text()));
       } else if (fichier.type === 'image/jpeg' || /\.jpe?g$/i.test(fichier.name) || fichier.type === 'image/heic' || fichier.type === 'image/heif' || /\.heic$/i.test(fichier.name)) {
@@ -712,6 +724,7 @@ document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
     }
 
     if (aImporter.length === 0) {
+      zoneProgression.classList.add('cache');
       alert(photosSansGps > 0
         ? 'Aucune coordonnée GPS trouvée dans ces photos. Vérifie que la localisation était activée lors de la prise de vue.'
         : 'Aucun point exploitable trouvé dans ces fichiers.');
@@ -720,18 +733,22 @@ document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
 
     let message = `Importer ${aImporter.length} point(s) ?`;
     if (photosSansGps > 0) message += ` (${photosSansGps} photo(s) sans position GPS ignorée(s))`;
-    if (!confirm(message)) return;
+    if (!confirm(message)) { zoneProgression.classList.add('cache'); return; }
 
-    for (const nouveauPoint of aImporter) {
+    for (let i = 0; i < aImporter.length; i++) {
+      const nouveauPoint = aImporter[i];
+      majProgression(`Enregistrement... ${i + 1}/${aImporter.length}`, 0.5 + ((i + 1) / aImporter.length) / 2);
       tousLesPoints.push({ point: nouveauPoint, enAttente: true });
       await enregistrerPoint(nouveauPoint);
     }
-    construireBarreFiltre();
-    rafraichirAffichageCarte();
+    if (estEnLigne()) await chargerPoints();
+    else { construireBarreFiltre(); rafraichirAffichageCarte(); }
     afficherToast('Import terminé !');
   } catch (err) {
     alert('Erreur lors de la lecture des fichiers.');
   } finally {
+    zoneProgression.classList.add('cache');
+    barreProgression.style.width = '0%';
     e.target.value = '';
   }
 });
@@ -1115,8 +1132,12 @@ function rafraichirAffichageCarte() {
   const pointsFiltres = calculerPointsFiltres();
 
   if (carte.getZoom() >= ZOOM_SANS_REGROUPEMENT) {
-    // Dernier niveau de zoom : on affiche chaque point individuellement, même très proches
-    pointsFiltres.forEach(({ point, enAttente }) => ajouterMarqueur(point, enAttente));
+    // Dernier niveau de zoom : on affiche chaque point individuellement, même très proches ;
+    // si plusieurs points partagent quasiment les mêmes coordonnées, on les répartit très
+    // légèrement en cercle pour que chacun reste visible et cliquable séparément.
+    ecarterPointsCoincidents(pointsFiltres).forEach(({ point, enAttente, latAffiche, lngAffiche }) => {
+      ajouterMarqueur(point, enAttente, { lat: latAffiche, lng: lngAffiche });
+    });
   } else {
     calculerZones(pointsFiltres).forEach(zone => {
       if (zone.length === 1) {
@@ -1130,7 +1151,36 @@ function rafraichirAffichageCarte() {
   if (!panneauListe.classList.contains('cache')) construireListe();
 }
 
-function ajouterMarqueur(point, enAttente) {
+// Deux coins peuvent légitimement partager la même coordonnée exacte (même trou, années
+// différentes). À l'affichage individuel, on les écarte de quelques mètres en cercle pour
+// que chaque icône reste visible et cliquable — la coordonnée réelle du point, elle, ne
+// change jamais (ni en base, ni dans la fiche détail).
+function ecarterPointsCoincidents(pointsFiltres) {
+  const RAYON_ECART_M = 3;
+  const groupes = {};
+  pointsFiltres.forEach(entree => {
+    const cle = `${entree.point.lat.toFixed(5)}_${entree.point.lng.toFixed(5)}`;
+    (groupes[cle] = groupes[cle] || []).push(entree);
+  });
+
+  const resultat = [];
+  Object.values(groupes).forEach(groupe => {
+    if (groupe.length === 1) {
+      const { point } = groupe[0];
+      resultat.push({ ...groupe[0], latAffiche: point.lat, lngAffiche: point.lng });
+      return;
+    }
+    groupe.forEach((entree, i) => {
+      const angle = (2 * Math.PI * i) / groupe.length;
+      const dLat = (RAYON_ECART_M * Math.cos(angle)) / 111320;
+      const dLng = (RAYON_ECART_M * Math.sin(angle)) / (111320 * Math.cos(entree.point.lat * Math.PI / 180));
+      resultat.push({ ...entree, latAffiche: entree.point.lat + dLat, lngAffiche: entree.point.lng + dLng });
+    });
+  });
+  return resultat;
+}
+
+function ajouterMarqueur(point, enAttente, positionAffichee) {
   const badgeAttente = enAttente ? `<span class="badge-en-attente">⏳</span>` : '';
   const nbVisites = 1 + (point.history ? point.history.length : 0);
   const productif = nbVisites >= 3 ? ' marqueur-productif' : '';
@@ -1140,7 +1190,9 @@ function ajouterMarqueur(point, enAttente) {
     iconSize: [28, 28],
     iconAnchor: [14, 14]
   });
-  const marqueur = L.marker([point.lat, point.lng], { icon: icone }).addTo(coucheMarqueurs);
+  const lat = positionAffichee ? positionAffichee.lat : point.lat;
+  const lng = positionAffichee ? positionAffichee.lng : point.lng;
+  const marqueur = L.marker([lat, lng], { icon: icone }).addTo(coucheMarqueurs);
   marqueur.on('click', () => {
     if (modeAjoutManuel) {
       positionTemporaire = { lat: point.lat, lng: point.lng, accuracy: null, manuel: true, elevation: point.elevation };
