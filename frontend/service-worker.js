@@ -4,7 +4,7 @@
 // - les tuiles de carte OSM sont mises en cache au fur et à mesure qu'on les consulte
 //   (donc les zones déjà visitées restent visibles hors-ligne)
 
-const CACHE_APP = 'champicoin-app-v35';
+const CACHE_APP = 'champicoin-app-v38';
 const CACHE_TUILES = 'champicoin-tuiles-v1';
 
 const FICHIERS_APP = [
@@ -36,6 +36,7 @@ const FICHIERS_APP = [
   '/icons/champignons/autre.png',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
+  'https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.7/dist/leaflet-rotate.js',
   'https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js',
   'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js'
 ];

@@ -36,6 +36,8 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 
 ### Sur la carte
 - **🎯** (sous les boutons de zoom +/-) : recentre la carte sur ta position actuelle, au zoom maximum
+- **↑** (juste dessous) : remet la carte plein nord — la flèche indique où se trouve le nord si tu as fait pivoter la carte
+- **Rotation** : pivote la carte librement à deux doigts (comme sur Google Maps)
 - **Point bleu** : ta position en direct ; une petite flèche indique la direction de ton déplacement si le téléphone la détecte
 - **Icônes de champignon** : chaque coin enregistré, avec une icône propre à chaque espèce
 - **Icône avec un ⏳** : ce point n'est pas encore synchronisé avec le serveur (créé hors-ligne, en attente de réseau)
@@ -84,6 +86,7 @@ Dès qu'un filtre est actif, la carte se recentre pour englober tous les points 
 
 ## Mode hors-ligne
 
+- **Les points déjà connus restent consultables sans réseau** : à chaque chargement réussi en ligne, une copie est gardée sur ton téléphone. Pense simplement à ouvrir l'app une fois en ligne avant de partir, pour que cette copie soit à jour
 - Un point ajouté sans réseau est mis en attente localement (badge "X point(s) en attente de synchro", icône avec un ⏳ sur la carte) puis envoyé automatiquement dès que le réseau revient (ou via le bouton 🔄)
 - Toucher la pastille "en ligne / hors-ligne" dans l'en-tête force le mode hors-ligne manuellement, par exemple à l'étranger pour ne jamais consommer de données
 - Le bouton ⬇️ permet de précharger le fond de carte d'une zone avant de partir en forêt sans réseau

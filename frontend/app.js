@@ -38,6 +38,7 @@ let carte;
 let coucheMarqueurs;
 let marqueurPosition = null;
 let derniereAccuracyConnue = null;
+let dernierCapConnu = null;
 let dernierePositionTimestamp = null;
 let groupeCourant = null;
 let positionTemporaire = null;
@@ -348,7 +349,7 @@ let coucheStandard, coucheTopo, topoActif = false;
 
 function initCarte() {
   if (carte) return;
-  carte = L.map('carte').setView([46.6, 2.2], 6);
+  carte = L.map('carte', { rotate: true, touchRotate: true, rotateControl: false, bearing: 0 }).setView([46.6, 2.2], 6);
 
   coucheStandard = L.tileLayer('https://a.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
@@ -392,6 +393,10 @@ function initCarte() {
 
   demarrerSuiviPosition();
   ajouterControleLocalisation();
+  ajouterControleRotation();
+  carte.on('rotate', () => {
+    if (marqueurPosition) marqueurPosition.setIcon(construireIconePosition(dernierCapConnu));
+  });
 
   carte.on('zoomend', () => rafraichirAffichageCarte());
 
@@ -422,9 +427,10 @@ function initCarte() {
 }
 
 function construireIconePosition(cap) {
+  const bearingCarte = (carte && carte.getBearing) ? carte.getBearing() : 0;
   const fleche = (cap === null || cap === undefined || isNaN(cap))
     ? ''
-    : `<div class="marqueur-ma-position-fleche" style="transform: rotate(${cap}deg);"></div>`;
+    : `<div class="marqueur-ma-position-fleche" style="transform: rotate(${cap - bearingCarte}deg);"></div>`;
   return L.divIcon({
     className: 'marqueur-ma-position-conteneur',
     html: `${fleche}<div class="marqueur-ma-position-point"></div>`,
@@ -438,7 +444,8 @@ function demarrerSuiviPosition() {
   navigator.geolocation.watchPosition(
     (pos) => {
       const latlng = [pos.coords.latitude, pos.coords.longitude];
-      const icone = construireIconePosition(pos.coords.heading);
+      dernierCapConnu = pos.coords.heading;
+      const icone = construireIconePosition(dernierCapConnu);
       if (!marqueurPosition) {
         marqueurPosition = L.marker(latlng, { icon: icone, zIndexOffset: 1000 }).addTo(carte);
       } else {
@@ -488,6 +495,26 @@ function ajouterControleLocalisation() {
     }
   });
   carte.addControl(new ControleLocalisation());
+}
+
+function ajouterControleRotation() {
+  const ControleRotation = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function () {
+      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-rotation');
+      const lien = L.DomUtil.create('a', '', div);
+      lien.href = '#';
+      lien.title = "Réorienter la carte plein nord";
+      const fleche = L.DomUtil.create('span', 'fleche-nord', lien);
+      fleche.innerHTML = '↑';
+      L.DomEvent.on(lien, 'click', L.DomEvent.stopPropagation);
+      L.DomEvent.on(lien, 'click', L.DomEvent.preventDefault);
+      L.DomEvent.on(lien, 'click', () => carte.setBearing(0));
+      carte.on('rotate', () => { fleche.style.transform = `rotate(${-carte.getBearing()}deg)`; });
+      return div;
+    }
+  });
+  carte.addControl(new ControleRotation());
 }
 
 // --- Téléchargement / suppression de la zone hors-ligne ---
@@ -992,12 +1019,21 @@ async function synchroniserPointsEnAttente(silencieux) {
   }
 
   synchronisationEnCours = true;
+  const zoneProgression = document.getElementById('progression-import');
+  const texteProgression = document.getElementById('progression-import-texte');
+  const barreProgression = document.getElementById('progression-import-barre');
   try {
     const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
 
     if (file.length > 0) {
+      zoneProgression.classList.remove('cache');
+      compteurAttente.classList.add('cache');
       const restants = [];
-      for (const point of file) {
+      for (let i = 0; i < file.length; i++) {
+        const point = file[i];
+        texteProgression.textContent = `Synchronisation... ${i + 1}/${file.length}`;
+        barreProgression.style.width = `${Math.round(((i + 1) / file.length) * 100)}%`;
+        await new Promise(r => setTimeout(r, 0));
         try {
           const reponse = await fetch(`${API_BASE}/spots`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1009,6 +1045,8 @@ async function synchroniserPointsEnAttente(silencieux) {
         }
       }
       localStorage.setItem('champicoin_file_attente', JSON.stringify(restants));
+      zoneProgression.classList.add('cache');
+      barreProgression.style.width = '0%';
       mettreAJourBadgeAttente();
     } else if (!silencieux) {
       afficherToast('Tout est déjà à jour.');
@@ -1021,10 +1059,13 @@ async function synchroniserPointsEnAttente(silencieux) {
     rafraichirAffichageCarte();
   } finally {
     synchronisationEnCours = false;
+    zoneProgression.classList.add('cache');
+    barreProgression.style.width = '0%';
   }
 }
 
 document.getElementById('btn-synchro-entete').addEventListener('click', () => synchroniserPointsEnAttente(false));
+compteurAttente.addEventListener('click', () => synchroniserPointsEnAttente(false));
 
 document.getElementById('btn-archives').addEventListener('click', async () => {
   const zone = document.getElementById('contenu-archives');
@@ -1165,7 +1206,7 @@ document.getElementById('btn-nettoyer-doublons').addEventListener('click', async
 function mettreAJourBadgeAttente() {
   const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
   if (file.length > 0) {
-    compteurAttente.textContent = `${file.length} point(s) en attente de synchro`;
+    compteurAttente.textContent = `${file.length} point(s) en attente — toucher pour synchroniser`;
     if (panneauListe.classList.contains('cache')) compteurAttente.classList.remove('cache');
   } else {
     compteurAttente.classList.add('cache');
@@ -1197,6 +1238,8 @@ function chargerPoints() {
 
   promesseChargementEnCours = (async () => {
     tousLesPoints = [];
+    const cleCache = `champicoin_cache_points_${groupeCourant.code}`;
+
     if (estEnLigne()) {
       try {
         const reponse = await fetch(`${API_BASE}/spots?groupCode=${encodeURIComponent(groupeCourant.code)}`);
@@ -1209,10 +1252,34 @@ function chargerPoints() {
           }
           tousLesPoints.push({ point: spot, enAttente: false });
         });
+        // Copie locale des points, pour pouvoir les afficher même sans réseau la prochaine fois
+        try {
+          localStorage.setItem(cleCache, JSON.stringify({ spots: data.spots || [], sauvegardeLe: new Date().toISOString() }));
+        } catch (err) { /* stockage plein ou indisponible : pas bloquant */ }
       } catch (err) {
         console.warn('Impossible de charger les points depuis le serveur.');
       }
+    } else {
+      // Hors-ligne : on affiche la dernière copie connue des points de ce groupe, s'il en existe une
+      try {
+        const cache = JSON.parse(localStorage.getItem(cleCache) || 'null');
+        if (cache && Array.isArray(cache.spots)) {
+          const idsVus = new Set();
+          cache.spots.forEach(spot => {
+            if (spot._id) {
+              if (idsVus.has(spot._id)) return;
+              idsVus.add(spot._id);
+            }
+            tousLesPoints.push({ point: spot, enAttente: false });
+          });
+          if (cache.spots.length > 0) {
+            const dateSauvegarde = new Date(cache.sauvegardeLe).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+            afficherToast(`Points hors-ligne (dernière synchro : ${dateSauvegarde})`);
+          }
+        }
+      } catch (err) { /* pas de cache disponible, on continue avec la file d'attente seule */ }
     }
+
     const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
     file.forEach(point => tousLesPoints.push({ point, enAttente: true }));
 
