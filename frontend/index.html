@@ -97,6 +97,7 @@
       <div class="panneau-liste-entete">
         <div class="panneau-liste-ligne-titre">
           <strong>Points affichés</strong>
+          <button id="btn-archives" class="btn-fermer-panneau" title="Voir les points archivés">🗄️</button>
           <button id="btn-nettoyer-doublons" class="btn-fermer-panneau" title="Nettoyer les doublons exacts (même date + mêmes coordonnées)">🧹</button>
         </div>
         <select id="tri-liste">
@@ -149,6 +150,7 @@
           <select id="type-champignon" required>
             <option value="" disabled selected>Choisis un type</option>
             <option>Bolet</option>
+            <option>Bolet à pied rouge</option>
             <option>Cèpe</option>
             <option>Chanterelle (Girolle)</option>
             <option>Chanterelle Violette</option>
@@ -195,6 +197,7 @@
       <div class="modal-actions">
         <button type="button" id="btn-supprimer-point" class="btn-danger">Supprimer</button>
         <button type="button" id="btn-modifier-point" class="btn-secondaire">Modifier</button>
+        <button type="button" id="btn-dupliquer-point" class="btn-secondaire">📋 Dupliquer</button>
         <button type="button" id="btn-itineraire-point" class="btn-secondaire">🧭 Itinéraire</button>
       </div>
     </div>
@@ -218,6 +221,15 @@
       <h2>📍 Coins de cette zone</h2>
       <p class="note-membres">Ces coins sont regroupés car trop proches à ce niveau de zoom — zoome davantage sur la carte pour les séparer, ou consulte les coordonnées exactes de chacun ci-dessous.</p>
       <div id="contenu-zone"></div>
+    </div>
+  </div>
+
+  <!-- Points archivés (récupérables) -->
+  <div id="modal-archives" class="modal cache">
+    <div class="modal-contenu">
+      <h2>🗄️ Points archivés</h2>
+      <p class="note-membres">Ces points ont été masqués de la carte (généralement via le nettoyage des doublons), mais jamais supprimés. Tu peux les restaurer à tout moment.</p>
+      <div id="contenu-archives"></div>
     </div>
   </div>
 

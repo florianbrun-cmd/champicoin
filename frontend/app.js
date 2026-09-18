@@ -17,6 +17,7 @@ const TYPE_VERS_ICONE = {
   'Petit gris': 'petit_gris',
   'Pleurote': 'pleurote',
   'Bolet': 'bolet',
+  'Bolet à pied rouge': 'bolet_pied_rouge',
   'Mousseron': 'mousseron',
   'Laccaire Améthyste': 'lactaire_amethyste'
 };
@@ -1007,11 +1008,59 @@ async function synchroniserPointsEnAttente(silencieux) {
 
 document.getElementById('btn-synchro-entete').addEventListener('click', () => synchroniserPointsEnAttente(false));
 
+document.getElementById('btn-archives').addEventListener('click', async () => {
+  const zone = document.getElementById('contenu-archives');
+  zone.innerHTML = '<p style="color:#888;padding:10px 0;">Chargement...</p>';
+  document.getElementById('modal-archives').classList.remove('cache');
+
+  if (!estEnLigne()) {
+    zone.innerHTML = '<p style="color:#888;">Connexion internet requise.</p>';
+    return;
+  }
+
+  try {
+    const reponse = await fetch(`${API_BASE}/spots?groupCode=${encodeURIComponent(groupeCourant.code)}&archives=1`);
+    const data = await reponse.json();
+    const archives = data.spots || [];
+
+    if (archives.length === 0) {
+      zone.innerHTML = '<p style="color:#888;">Aucun point archivé pour le moment.</p>';
+      return;
+    }
+
+    zone.innerHTML = archives.map(point => `
+      <div class="item-liste" data-id="${point._id}">
+        <div class="item-liste-icone">${htmlIcone(point.mushroomType)}</div>
+        <div class="item-liste-texte">
+          <div class="item-liste-type">${point.mushroomType}</div>
+          <div class="item-liste-details">${formaterDate(point.dateFound)} · ${formaterCoordDMM(point.lat, point.lng)}</div>
+        </div>
+        <button type="button" class="btn-restaurer" data-id="${point._id}">Restaurer</button>
+      </div>
+    `).join('');
+
+    zone.querySelectorAll('.btn-restaurer').forEach(bouton => {
+      bouton.addEventListener('click', async () => {
+        bouton.disabled = true;
+        bouton.textContent = '...';
+        await fetch(`${API_BASE}/spots/${bouton.dataset.id}/archive`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ groupCode: groupeCourant.code, archive: false })
+        });
+        bouton.closest('.item-liste').remove();
+        afficherToast('Point restauré.');
+        chargerPoints();
+      });
+    });
+  } catch (err) {
+    zone.innerHTML = '<p style="color:#888;">Erreur de chargement.</p>';
+  }
+});
+
 document.getElementById('btn-nettoyer-doublons').addEventListener('click', async () => {
   if (!estEnLigne()) { alert('Une connexion internet est nécessaire pour nettoyer les doublons.'); return; }
 
-  // Correspondance stricte : mêmes coordonnées (au mètre près) ET même date. Contrairement
-  // à un ancien réglage plus tolérant, on ne fusionne plus des points simplement "proches".
+  // Correspondance stricte : mêmes coordonnées (au mètre près) ET même date.
   const groupes = {};
   const pointsAvecId = tousLesPoints.filter(({ point }) => point._id);
   pointsAvecId.forEach(({ point }) => {
@@ -1020,13 +1069,13 @@ document.getElementById('btn-nettoyer-doublons').addEventListener('click', async
     groupes[cle].push(point);
   });
 
-  const idsASupprimer = [];
+  const idsAArchiver = [];
   Object.values(groupes).forEach(points => {
     if (points.length <= 1) return;
     const tries = points.slice().sort((a, b) => String(a._id).localeCompare(String(b._id)));
-    for (let i = 1; i < tries.length; i++) idsASupprimer.push(String(tries[i]._id));
+    for (let i = 1; i < tries.length; i++) idsAArchiver.push(String(tries[i]._id));
   });
-  const idsUniques = [...new Set(idsASupprimer)];
+  const idsUniques = [...new Set(idsAArchiver)];
 
   if (idsUniques.length === 0) {
     afficherToast('Aucun doublon exact trouvé.');
@@ -1035,33 +1084,39 @@ document.getElementById('btn-nettoyer-doublons').addEventListener('click', async
 
   const totalActuel = pointsAvecId.length;
   const restants = totalActuel - idsUniques.length;
-  let messageConfirmation = `${idsUniques.length} doublon(s) exact(s) détecté(s) (même date, mêmes coordonnées).\n\n` +
+  const messageConfirmation = `${idsUniques.length} doublon(s) exact(s) détecté(s) (même date, mêmes coordonnées).\n\n` +
     `Total actuel : ${totalActuel} points\n` +
-    `Supprimés : ${idsUniques.length}\n` +
-    `Restants après nettoyage : ${restants}\n\n` +
-    `Un exemplaire de chaque doublon sera conservé. Continuer ?`;
+    `Archivés (masqués de la carte) : ${idsUniques.length}\n` +
+    `Visibles après nettoyage : ${restants}\n\n` +
+    `Un exemplaire de chaque doublon reste visible. Les autres ne sont pas supprimés : ils sont archivés, et resteront récupérables depuis "Points archivés". Continuer ?`;
   if (!confirm(messageConfirmation)) return;
 
-  // Garde-fou supplémentaire si plus de la moitié des points seraient supprimés :
-  // on demande une confirmation explicite tapée à la main avant de continuer.
-  if (idsUniques.length > totalActuel / 2) {
-    const saisie = prompt(`Attention : ça représente plus de la moitié des points de la base.\nTape SUPPRIMER en majuscules pour confirmer.`);
-    if (saisie !== 'SUPPRIMER') { afficherToast('Nettoyage annulé.'); return; }
-  }
+  const zoneProgression = document.getElementById('progression-import');
+  const texteProgression = document.getElementById('progression-import-texte');
+  const barreProgression = document.getElementById('progression-import-barre');
+  zoneProgression.classList.remove('cache');
+  compteurAttente.classList.add('cache');
 
-  const bouton = document.getElementById('btn-nettoyer-doublons');
-  const titreInitial = bouton.title;
   const taillePaquet = 10;
   for (let i = 0; i < idsUniques.length; i += taillePaquet) {
     const paquet = idsUniques.slice(i, i + taillePaquet);
+    const fait = Math.min(i + taillePaquet, idsUniques.length);
+    texteProgression.textContent = `Archivage des doublons... ${fait}/${idsUniques.length}`;
+    barreProgression.style.width = `${Math.round((fait / idsUniques.length) * 100)}%`;
+    await new Promise(r => setTimeout(r, 0));
     await Promise.all(paquet.map(id =>
-      fetch(`${API_BASE}/spots/${id}?groupCode=${encodeURIComponent(groupeCourant.code)}`, { method: 'DELETE' }).catch(() => {})
+      fetch(`${API_BASE}/spots/${id}/archive`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupCode: groupeCourant.code, archive: true })
+      }).catch(() => {})
     ));
-    bouton.title = `Suppression... ${Math.min(i + taillePaquet, idsUniques.length)}/${idsUniques.length}`;
   }
-  bouton.title = titreInitial;
 
-  afficherToast(`${idsUniques.length} doublon(s) supprimé(s).`);
+  zoneProgression.classList.add('cache');
+  barreProgression.style.width = '0%';
+  mettreAJourBadgeAttente();
+
+  afficherToast(`${idsUniques.length} doublon(s) archivé(s) — récupérables via "Points archivés".`);
   await chargerPoints();
 });
 
@@ -1241,8 +1296,8 @@ function rafraichirAffichageCarte() {
     // Dernier niveau de zoom : on affiche chaque point individuellement, même très proches ;
     // si plusieurs points partagent quasiment les mêmes coordonnées, on les répartit très
     // légèrement en cercle pour que chacun reste visible et cliquable séparément.
-    ecarterPointsCoincidents(pointsFiltres).forEach(({ point, enAttente, latAffiche, lngAffiche }) => {
-      ajouterMarqueur(point, enAttente, { lat: latAffiche, lng: lngAffiche });
+    ecarterPointsCoincidents(pointsFiltres).forEach(({ point, enAttente, latAffiche, lngAffiche, memeCoinPlusieursFois }) => {
+      ajouterMarqueur(point, enAttente, { lat: latAffiche, lng: lngAffiche }, memeCoinPlusieursFois);
     });
   } else {
     calculerZones(pointsFiltres).forEach(zone => {
@@ -1273,23 +1328,23 @@ function ecarterPointsCoincidents(pointsFiltres) {
   Object.values(groupes).forEach(groupe => {
     if (groupe.length === 1) {
       const { point } = groupe[0];
-      resultat.push({ ...groupe[0], latAffiche: point.lat, lngAffiche: point.lng });
+      resultat.push({ ...groupe[0], latAffiche: point.lat, lngAffiche: point.lng, memeCoinPlusieursFois: false });
       return;
     }
     groupe.forEach((entree, i) => {
       const angle = (2 * Math.PI * i) / groupe.length;
       const dLat = (RAYON_ECART_M * Math.cos(angle)) / 111320;
       const dLng = (RAYON_ECART_M * Math.sin(angle)) / (111320 * Math.cos(entree.point.lat * Math.PI / 180));
-      resultat.push({ ...entree, latAffiche: entree.point.lat + dLat, lngAffiche: entree.point.lng + dLng });
+      resultat.push({ ...entree, latAffiche: entree.point.lat + dLat, lngAffiche: entree.point.lng + dLng, memeCoinPlusieursFois: true });
     });
   });
   return resultat;
 }
 
-function ajouterMarqueur(point, enAttente, positionAffichee) {
+function ajouterMarqueur(point, enAttente, positionAffichee, memeCoinPlusieursFois) {
   const badgeAttente = enAttente ? `<span class="badge-en-attente">⏳</span>` : '';
   const nbVisites = 1 + (point.history ? point.history.length : 0);
-  const productif = nbVisites >= 3 ? ' marqueur-productif' : '';
+  const productif = (nbVisites >= 3 || memeCoinPlusieursFois) ? ' marqueur-productif' : '';
   const icone = L.divIcon({
     className: 'marqueur-champi-ancre',
     html: `<div class="marqueur-champi${enAttente ? ' point-en-attente' : ''}${productif}">${htmlIcone(point.mushroomType)}${badgeAttente}</div>`,
@@ -1659,6 +1714,21 @@ function afficherDetailPoint(point, depuisZone) {
   document.getElementById('modal-detail').classList.remove('cache');
 }
 
+document.getElementById('btn-dupliquer-point').addEventListener('click', () => {
+  if (!pointActuellementAffiche) return;
+  const point = pointActuellementAffiche;
+  positionTemporaire = {
+    lat: point.lat, lng: point.lng,
+    accuracy: accuracyActuelleSiRecente(),
+    elevation: point.elevation,
+    manuel: true
+  };
+  document.getElementById('modal-detail').classList.add('cache');
+  ouvrirModalAjout();
+  // Pré-remplit le même type, pour aller vite ; la date reste sur aujourd'hui
+  selectionnerTypeChampignon(point.mushroomType);
+});
+
 document.getElementById('btn-itineraire-point').addEventListener('click', () => {
   document.getElementById('modal-itineraire').classList.remove('cache');
 });
@@ -1678,7 +1748,7 @@ document.querySelectorAll('.btn-app-navigation').forEach(bouton => {
 });
 
 // Fermeture des modales en cliquant en dehors de leur contenu
-['modal-detail', 'modal-zone', 'modal-membres', 'modal-itineraire'].forEach(id => {
+['modal-detail', 'modal-zone', 'modal-membres', 'modal-itineraire', 'modal-archives'].forEach(id => {
   document.getElementById(id).addEventListener('click', (e) => {
     if (e.target.id === id) document.getElementById(id).classList.add('cache');
   });

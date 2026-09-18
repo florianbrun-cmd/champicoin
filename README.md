@@ -30,7 +30,7 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 | Code affiché | **Touche-le pour le copier** dans le presse-papiers, prêt à partager |
 | 🔄 | Forcer la synchronisation immédiate des points en attente |
 | 👥 | Liste des membres du groupe et la date/heure de leur dernière connexion |
-| ☰ | Liste de tous les points affichés, triable (proximité, plus récent, plus ancien) — bouton 🧹 pour supprimer les doublons exacts (même date + mêmes coordonnées) |
+| ☰ | Liste de tous les points affichés, triable (proximité, plus récent, plus ancien) — bouton 🧹 pour archiver les doublons exacts (même date + mêmes coordonnées, jamais supprimés) et bouton 🗄️ pour les consulter/restaurer |
 | ▽ | Ouvre les filtres (recherche, type de champignon, mois, département), avec un bouton **RAZ** pour tout réinitialiser |
 | ⇄ | Change de groupe (déconnexion de cet appareil) |
 
@@ -67,6 +67,7 @@ En cliquant sur un coin, tu retrouves :
 - Ses coordonnées exactes et son altitude
 - Un historique complet : qui l'a créé et quand, et le détail de chaque modification passée (type, date, notes, auteur)
 - **Supprimer**
+- **📋 Dupliquer** : crée un nouveau coin au même endroit exact, pratique pour noter une nouvelle récolte au même trou une autre année (les points ainsi liés sont visuellement mis en avant sur la carte — halo doré, comme un coin productif)
 - **🧭 Itinéraire** : propose de s'y rendre via Google Maps, Plans (Apple) ou Waze
 
 La fenêtre se ferme en cliquant n'importe où en dehors.

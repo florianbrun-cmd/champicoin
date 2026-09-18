@@ -15,11 +15,14 @@ async function verifierGroupe(code) {
 // Récupérer tous les points d'un groupe
 router.get('/', async (req, res) => {
   try {
-    const { groupCode } = req.query;
+    const { groupCode, archives } = req.query;
     const groupe = await verifierGroupe(groupCode);
     if (!groupe) return res.status(403).json({ error: 'Code de groupe invalide.' });
 
-    const spots = await Spot.find({ groupCode: groupe.code });
+    const filtre = { groupCode: groupe.code };
+    filtre.archive = archives === '1' ? true : { $ne: true };
+
+    const spots = await Spot.find(filtre);
     res.json({ spots });
   } catch (erreur) {
     console.error(erreur);
@@ -215,6 +218,26 @@ router.post('/bulk', async (req, res) => {
     }
 
     res.json({ inseres: inseres.length, doublons });
+  } catch (erreur) {
+    console.error(erreur);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// Archive un point (masqué de la carte/liste) ou le restaure — jamais de suppression réelle
+router.patch('/:id/archive', async (req, res) => {
+  try {
+    const { groupCode, archive } = req.body;
+    const groupe = await verifierGroupe(groupCode);
+    if (!groupe) return res.status(403).json({ error: 'Code de groupe invalide.' });
+
+    const spot = await Spot.findOneAndUpdate(
+      { _id: req.params.id, groupCode: groupe.code },
+      { $set: { archive: !!archive } },
+      { new: true }
+    );
+    if (!spot) return res.status(404).json({ error: 'Point introuvable.' });
+    res.json({ spot });
   } catch (erreur) {
     console.error(erreur);
     res.status(500).json({ error: 'Erreur serveur.' });

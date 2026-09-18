@@ -26,6 +26,7 @@ const spotSchema = new mongoose.Schema({
   updatedBy: { type: String, default: '' },
   updatedAt: { type: Date, default: Date.now },
   history: { type: [versionSchema], default: [] },
+  archive: { type: Boolean, default: false }, // masqué de la carte/liste, mais jamais supprimé — récupérable
   createdAt: { type: Date, default: Date.now }
 });
 
