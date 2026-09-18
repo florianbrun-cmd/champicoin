@@ -8,6 +8,7 @@ const cors = require('cors');
 const path = require('path');
 
 const { connecterBaseDeDonnees } = require('./db');
+const { demarrerPurgeAutomatique } = require('./purge');
 const groupsRoutes = require('./routes/groups');
 const spotsRoutes = require('./routes/spots');
 
@@ -26,6 +27,7 @@ app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
 async function demarrer() {
   await connecterBaseDeDonnees();
+  demarrerPurgeAutomatique();
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🍄 Champicoin est lancé sur le port ${PORT}`);
   });

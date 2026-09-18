@@ -30,7 +30,7 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 | Code affiché | **Touche-le pour le copier** dans le presse-papiers, prêt à partager |
 | 🔄 | Forcer la synchronisation immédiate des points en attente |
 | 👥 | Liste des membres du groupe et la date/heure de leur dernière connexion |
-| ☰ | Liste de tous les points affichés, triable (proximité, plus récent, plus ancien) — bouton 🧹 pour archiver les doublons exacts (même date + mêmes coordonnées, jamais supprimés) et bouton 🗄️ pour les consulter/restaurer |
+| ☰ | Liste de tous les points affichés, triable (proximité, plus récent, plus ancien) — bouton 🧹 pour archiver les doublons exacts (même date + mêmes coordonnées, jamais supprimés immédiatement) et bouton 🗄️ pour les consulter/restaurer. Un point archivé depuis plus de 3 mois est supprimé automatiquement (purge trimestrielle) — restaure-le avant ce délai si tu veux le garder |
 | ▽ | Ouvre les filtres (recherche, type de champignon, mois, département), avec un bouton **RAZ** pour tout réinitialiser |
 | ⇄ | Change de groupe (déconnexion de cet appareil) |
 

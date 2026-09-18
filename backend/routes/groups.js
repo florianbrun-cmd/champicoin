@@ -5,16 +5,16 @@ const express = require('express');
 const router = express.Router();
 const Group = require('../models/Group');
 
-// Limiteur très simple contre l'énumération de pseudos : max 5 recherches / 10 min / IP.
+// Limiteur très simple contre la force brute : max N tentatives / fenêtre / IP, par catégorie.
 // (Ce n'est pas une vraie authentification — voir le README pour les limites de sécurité.)
-const tentativesRecherche = new Map(); // ip -> [timestamps]
-function trafiqueAutorise(ip) {
+const tentatives = new Map(); // "categorie:ip" -> [timestamps]
+function trafiqueAutorise(categorie, ip, maxTentatives, fenetreMs) {
+  const cle = `${categorie}:${ip}`;
   const maintenant = Date.now();
-  const fenetre = 10 * 60 * 1000;
-  const historique = (tentativesRecherche.get(ip) || []).filter(t => maintenant - t < fenetre);
-  if (historique.length >= 5) return false;
+  const historique = (tentatives.get(cle) || []).filter(t => maintenant - t < fenetreMs);
+  if (historique.length >= maxTentatives) return false;
   historique.push(maintenant);
-  tentativesRecherche.set(ip, historique);
+  tentatives.set(cle, historique);
   return true;
 }
 
@@ -22,8 +22,12 @@ function trafiqueAutorise(ip) {
 function generateCode() {
   const mots = ['CEPE', 'MORILLE', 'CHANTERELLE', 'BOLET', 'AMANITE', 'TRUFFE', 'RUSSULE', 'PIED-BLEU'];
   const mot = mots[Math.floor(Math.random() * mots.length)];
-  const chiffres = Math.floor(1000 + Math.random() * 9000);
-  return `${mot}-${chiffres}`;
+  // Suffixe alphanumérique de 6 caractères (sans caractères ambigus 0/O/1/I) :
+  // ~2 milliards de combinaisons par mot, contre 9000 auparavant.
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let suffixe = '';
+  for (let i = 0; i < 6; i++) suffixe += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return `${mot}-${suffixe}`;
 }
 
 // Créer un nouveau groupe privé
@@ -55,6 +59,11 @@ router.post('/join', async (req, res) => {
     const { code } = req.body;
     if (!code) {
       return res.status(400).json({ error: 'Code requis.' });
+    }
+
+    const ip = req.ip || req.connection.remoteAddress || 'inconnu';
+    if (!trafiqueAutorise('join', ip, 20, 10 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Trop de tentatives, réessaie dans quelques minutes.' });
     }
 
     const groupe = await Group.findOne({ code: code.trim().toUpperCase() });
@@ -137,7 +146,7 @@ router.get('/find-by-pseudo', async (req, res) => {
     if (pseudo.length < 3) return res.status(400).json({ error: 'Indique au moins 3 caractères.' });
 
     const ip = req.ip || req.connection.remoteAddress || 'inconnu';
-    if (!trafiqueAutorise(ip)) {
+    if (!trafiqueAutorise('pseudo', ip, 5, 10 * 60 * 1000)) {
       return res.status(429).json({ error: 'Trop de tentatives, réessaie dans quelques minutes.' });
     }
 

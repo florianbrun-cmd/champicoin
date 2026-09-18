@@ -755,8 +755,26 @@ document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
       return;
     }
 
+    // Évite de réimporter un point déjà présent (même type, même date, mêmes coordonnées) —
+    // utile si le même fichier GPX ou les mêmes photos sont importés une seconde fois.
+    const clesExistantes = new Set(
+      tousLesPoints
+        .filter(({ point }) => point._id)
+        .map(({ point }) => `${point.mushroomType}|${point.dateFound}|${point.lat.toFixed(6)}|${point.lng.toFixed(6)}`)
+    );
+    const nbAvantFiltre = aImporter.length;
+    aImporter = aImporter.filter(p => !clesExistantes.has(`${p.mushroomType}|${p.dateFound}|${p.lat.toFixed(6)}|${p.lng.toFixed(6)}`));
+    const dejaExistants = nbAvantFiltre - aImporter.length;
+
+    if (aImporter.length === 0) {
+      zoneProgression.classList.add('cache');
+      alert(`Les ${dejaExistants} point(s) de cet import existent déjà (même type, même date, mêmes coordonnées) — rien à ajouter.`);
+      return;
+    }
+
     let message = `Importer ${aImporter.length} point(s) ?`;
     if (photosSansGps > 0) message += ` (${photosSansGps} photo(s) sans position GPS ignorée(s))`;
+    if (dejaExistants > 0) message += ` (${dejaExistants} déjà existant(s) ignoré(s))`;
     if (!confirm(message)) { zoneProgression.classList.add('cache'); return; }
 
     if (estEnLigne()) {
@@ -1335,7 +1353,10 @@ function ecarterPointsCoincidents(pointsFiltres) {
       const angle = (2 * Math.PI * i) / groupe.length;
       const dLat = (RAYON_ECART_M * Math.cos(angle)) / 111320;
       const dLng = (RAYON_ECART_M * Math.sin(angle)) / (111320 * Math.cos(entree.point.lat * Math.PI / 180));
-      resultat.push({ ...entree, latAffiche: entree.point.lat + dLat, lngAffiche: entree.point.lng + dLng, memeCoinPlusieursFois: true });
+      // Le halo doré ne s'applique que si un AUTRE point du groupe partage aussi le même type
+      // (même coordonnées mais espèces différentes = pas "productif" pour autant)
+      const memeType = groupe.some((autre, j) => j !== i && autre.point.mushroomType === entree.point.mushroomType);
+      resultat.push({ ...entree, latAffiche: entree.point.lat + dLat, lngAffiche: entree.point.lng + dLng, memeCoinPlusieursFois: memeType });
     });
   });
   return resultat;
