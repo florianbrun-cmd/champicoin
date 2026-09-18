@@ -854,6 +854,7 @@ document.getElementById('form-champignon').addEventListener('submit', async (e) 
     construireBarreFiltre();
     rafraichirAffichageCarte();
     await enregistrerPoint(nouveauPoint);
+    if (estEnLigne()) await chargerPoints(); // remplace l'entrée optimiste par l'état réel du serveur
   }
   positionTemporaire = null;
 });
@@ -941,71 +942,6 @@ async function synchroniserPointsEnAttente(silencieux) {
 
 document.getElementById('btn-synchro-entete').addEventListener('click', () => synchroniserPointsEnAttente(false));
 
-document.getElementById('btn-nettoyer-doublons').addEventListener('click', async () => {
-  if (!estEnLigne()) { alert('Une connexion internet est nécessaire pour nettoyer les doublons.'); return; }
-
-  const DISTANCE_DOUBLON_M = 5;
-
-  // On ne compare qu'entre points de même type et même date (comme dans la fenêtre de zone),
-  // puis on regroupe ceux à moins de 5 m les uns des autres : de vrais doublons ont rarement
-  // des coordonnées identiques au bit près (positions tapées séparément), mais sont très proches.
-  const parTypeEtDate = {};
-  tousLesPoints.forEach(({ point }) => {
-    if (!point._id) return; // on ignore les points pas encore synchronisés
-    const cle = `${point.mushroomType}|${point.dateFound}`;
-    if (!parTypeEtDate[cle]) parTypeEtDate[cle] = [];
-    parTypeEtDate[cle].push(point);
-  });
-
-  const idsASupprimer = [];
-  Object.values(parTypeEtDate).forEach(points => {
-    if (points.length <= 1) return;
-
-    // Regroupement par proximité (< 5 m), même logique qu'un union-find simple
-    const n = points.length;
-    const parent = Array.from({ length: n }, (_, i) => i);
-    function find(i) { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; }
-    function union(a, b) { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; }
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        if (distanceMetres(points[i].lat, points[i].lng, points[j].lat, points[j].lng) < DISTANCE_DOUBLON_M) union(i, j);
-      }
-    }
-    const groupes = {};
-    for (let i = 0; i < n; i++) { const r = find(i); (groupes[r] = groupes[r] || []).push(points[i]); }
-
-    Object.values(groupes).forEach(groupe => {
-      if (groupe.length <= 1) return;
-      const tries = groupe.slice().sort((a, b) => String(a._id).localeCompare(String(b._id)));
-      for (let i = 1; i < tries.length; i++) idsASupprimer.push(String(tries[i]._id));
-    });
-  });
-
-  const idsUniques = [...new Set(idsASupprimer)];
-
-  if (idsUniques.length === 0) {
-    afficherToast('Aucun doublon trouvé.');
-    return;
-  }
-
-  if (!confirm(`${idsUniques.length} point(s) en double détecté(s) (même type, même date, à moins de ${DISTANCE_DOUBLON_M} m). Un exemplaire de chaque sera conservé. Continuer ?`)) return;
-
-  const bouton = document.getElementById('btn-nettoyer-doublons');
-  const titreInitial = bouton.title;
-  const taillePaquet = 10;
-  for (let i = 0; i < idsUniques.length; i += taillePaquet) {
-    const paquet = idsUniques.slice(i, i + taillePaquet);
-    await Promise.all(paquet.map(id =>
-      fetch(`${API_BASE}/spots/${id}?groupCode=${encodeURIComponent(groupeCourant.code)}`, { method: 'DELETE' }).catch(() => {})
-    ));
-    bouton.title = `Suppression... ${Math.min(i + taillePaquet, idsUniques.length)}/${idsUniques.length}`;
-  }
-  bouton.title = titreInitial;
-
-  afficherToast(`${idsUniques.length} doublon(s) supprimé(s).`);
-  chargerPoints();
-});
-
 function mettreAJourBadgeAttente() {
   const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
   if (file.length > 0) {
@@ -1031,30 +967,41 @@ window.addEventListener('offline', () => {
 // 5. AFFICHAGE, FILTRES & LISTE TRIABLE
 // ==================================================
 
-async function chargerPoints() {
-  tousLesPoints = [];
-  if (estEnLigne()) {
-    try {
-      const reponse = await fetch(`${API_BASE}/spots?groupCode=${encodeURIComponent(groupeCourant.code)}`);
-      const data = await reponse.json();
-      const idsVus = new Set();
-      (data.spots || []).forEach(spot => {
-        if (spot._id) {
-          if (idsVus.has(spot._id)) return; // sécurité : jamais deux fois le même point affiché
-          idsVus.add(spot._id);
-        }
-        tousLesPoints.push({ point: spot, enAttente: false });
-      });
-    } catch (err) {
-      console.warn('Impossible de charger les points depuis le serveur.');
-    }
-  }
-  const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
-  file.forEach(point => tousLesPoints.push({ point, enAttente: true }));
+let promesseChargementEnCours = null;
 
-  construireBarreFiltre();
-  rafraichirAffichageCarte();
-  rattraperAltitudesManquantes();
+function chargerPoints() {
+  // Si un chargement est déjà en cours, on renvoie la même promesse au lieu d'en
+  // démarrer un second en parallèle : c'était la cause du doublon d'affichage
+  // (deux chargements qui se chevauchent poussent chacun leur propre exemplaire).
+  if (promesseChargementEnCours) return promesseChargementEnCours;
+
+  promesseChargementEnCours = (async () => {
+    tousLesPoints = [];
+    if (estEnLigne()) {
+      try {
+        const reponse = await fetch(`${API_BASE}/spots?groupCode=${encodeURIComponent(groupeCourant.code)}`);
+        const data = await reponse.json();
+        const idsVus = new Set();
+        (data.spots || []).forEach(spot => {
+          if (spot._id) {
+            if (idsVus.has(spot._id)) return; // sécurité : jamais deux fois le même point affiché
+            idsVus.add(spot._id);
+          }
+          tousLesPoints.push({ point: spot, enAttente: false });
+        });
+      } catch (err) {
+        console.warn('Impossible de charger les points depuis le serveur.');
+      }
+    }
+    const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
+    file.forEach(point => tousLesPoints.push({ point, enAttente: true }));
+
+    construireBarreFiltre();
+    rafraichirAffichageCarte();
+    rattraperAltitudesManquantes();
+  })().finally(() => { promesseChargementEnCours = null; });
+
+  return promesseChargementEnCours;
 }
 
 // Complète en tâche de fond l'altitude des points créés avant l'ajout de cette fonctionnalité.
