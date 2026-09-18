@@ -36,6 +36,8 @@ const compteurAttente = document.getElementById('compteur-attente');
 let carte;
 let coucheMarqueurs;
 let marqueurPosition = null;
+let derniereAccuracyConnue = null;
+let dernierePositionTimestamp = null;
 let groupeCourant = null;
 let positionTemporaire = null;
 let tousLesPoints = [];
@@ -398,7 +400,7 @@ function initCarte() {
 
   carte.on('click', (e) => {
     if (modeAjoutManuel) {
-      positionTemporaire = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: null, elevation: null, manuel: true };
+      positionTemporaire = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: accuracyActuelleSiRecente(), elevation: null, manuel: true };
       desactiverModeAjoutManuel();
       ouvrirModalAjout();
       recupererAltitude(e.latlng.lat, e.latlng.lng);
@@ -442,10 +444,20 @@ function demarrerSuiviPosition() {
         marqueurPosition.setLatLng(latlng);
         marqueurPosition.setIcon(icone);
       }
+      derniereAccuracyConnue = pos.coords.accuracy;
+      dernierePositionTimestamp = Date.now();
     },
     (err) => console.warn('Suivi de position indisponible :', err.message),
     { enableHighAccuracy: true, maximumAge: 5000 }
   );
+}
+
+// Renvoie la précision GPS actuelle de l'appareil si elle est connue et récente
+// (moins de 30 s), sinon null — utilisée au moment d'un placement manuel sur la carte.
+function accuracyActuelleSiRecente() {
+  if (derniereAccuracyConnue === null || !dernierePositionTimestamp) return null;
+  if (Date.now() - dernierePositionTimestamp > 30000) return null;
+  return derniereAccuracyConnue;
 }
 
 function ajouterControleLocalisation() {
@@ -708,10 +720,14 @@ document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
   const texteProgression = document.getElementById('progression-import-texte');
   const barreProgression = document.getElementById('progression-import-barre');
 
-  function majProgression(texte, ratio) {
+  async function majProgression(texte, ratio) {
     zoneProgression.classList.remove('cache');
+    compteurAttente.classList.add('cache'); // évite la confusion avec le badge "en attente" pendant l'import
     texteProgression.textContent = texte;
     barreProgression.style.width = `${Math.round(ratio * 100)}%`;
+    // Sans cette pause, le navigateur peut enchaîner les étapes sans jamais peindre
+    // la barre à l'écran (mise à jour trop rapide pour être visible autrement).
+    await new Promise(r => setTimeout(r, 0));
   }
 
   try {
@@ -720,7 +736,7 @@ document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
 
     for (let i = 0; i < fichiers.length; i++) {
       const fichier = fichiers[i];
-      majProgression(`Lecture des fichiers... ${i + 1}/${fichiers.length}`, (i + 1) / fichiers.length / 2);
+      await majProgression(`Lecture des fichiers... ${i + 1}/${fichiers.length}`, (i + 1) / fichiers.length / 2);
       if (fichier.name.toLowerCase().endsWith('.gpx')) {
         aImporter.push(...importerGpx(await fichier.text()));
       } else if (fichier.type === 'image/jpeg' || /\.jpe?g$/i.test(fichier.name) || fichier.type === 'image/heic' || fichier.type === 'image/heif' || /\.heic$/i.test(fichier.name)) {
@@ -749,7 +765,7 @@ document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
       for (let i = 0; i < aImporter.length; i += TAILLE_LOT) {
         const lot = aImporter.slice(i, i + TAILLE_LOT);
         const fait = Math.min(i + TAILLE_LOT, aImporter.length);
-        majProgression(`Enregistrement... ${fait}/${aImporter.length}`, 0.5 + (fait / aImporter.length) / 2);
+        await majProgression(`Enregistrement... ${fait}/${aImporter.length}`, 0.5 + (fait / aImporter.length) / 2);
         try {
           const reponse = await fetch(`${API_BASE}/spots/bulk`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -780,6 +796,7 @@ document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
   } finally {
     zoneProgression.classList.add('cache');
     barreProgression.style.width = '0%';
+    mettreAJourBadgeAttente();
     e.target.value = '';
   }
 });
@@ -989,6 +1006,64 @@ async function synchroniserPointsEnAttente(silencieux) {
 }
 
 document.getElementById('btn-synchro-entete').addEventListener('click', () => synchroniserPointsEnAttente(false));
+
+document.getElementById('btn-nettoyer-doublons').addEventListener('click', async () => {
+  if (!estEnLigne()) { alert('Une connexion internet est nécessaire pour nettoyer les doublons.'); return; }
+
+  // Correspondance stricte : mêmes coordonnées (au mètre près) ET même date. Contrairement
+  // à un ancien réglage plus tolérant, on ne fusionne plus des points simplement "proches".
+  const groupes = {};
+  const pointsAvecId = tousLesPoints.filter(({ point }) => point._id);
+  pointsAvecId.forEach(({ point }) => {
+    const cle = `${point.lat.toFixed(6)}_${point.lng.toFixed(6)}_${point.dateFound}`;
+    if (!groupes[cle]) groupes[cle] = [];
+    groupes[cle].push(point);
+  });
+
+  const idsASupprimer = [];
+  Object.values(groupes).forEach(points => {
+    if (points.length <= 1) return;
+    const tries = points.slice().sort((a, b) => String(a._id).localeCompare(String(b._id)));
+    for (let i = 1; i < tries.length; i++) idsASupprimer.push(String(tries[i]._id));
+  });
+  const idsUniques = [...new Set(idsASupprimer)];
+
+  if (idsUniques.length === 0) {
+    afficherToast('Aucun doublon exact trouvé.');
+    return;
+  }
+
+  const totalActuel = pointsAvecId.length;
+  const restants = totalActuel - idsUniques.length;
+  let messageConfirmation = `${idsUniques.length} doublon(s) exact(s) détecté(s) (même date, mêmes coordonnées).\n\n` +
+    `Total actuel : ${totalActuel} points\n` +
+    `Supprimés : ${idsUniques.length}\n` +
+    `Restants après nettoyage : ${restants}\n\n` +
+    `Un exemplaire de chaque doublon sera conservé. Continuer ?`;
+  if (!confirm(messageConfirmation)) return;
+
+  // Garde-fou supplémentaire si plus de la moitié des points seraient supprimés :
+  // on demande une confirmation explicite tapée à la main avant de continuer.
+  if (idsUniques.length > totalActuel / 2) {
+    const saisie = prompt(`Attention : ça représente plus de la moitié des points de la base.\nTape SUPPRIMER en majuscules pour confirmer.`);
+    if (saisie !== 'SUPPRIMER') { afficherToast('Nettoyage annulé.'); return; }
+  }
+
+  const bouton = document.getElementById('btn-nettoyer-doublons');
+  const titreInitial = bouton.title;
+  const taillePaquet = 10;
+  for (let i = 0; i < idsUniques.length; i += taillePaquet) {
+    const paquet = idsUniques.slice(i, i + taillePaquet);
+    await Promise.all(paquet.map(id =>
+      fetch(`${API_BASE}/spots/${id}?groupCode=${encodeURIComponent(groupeCourant.code)}`, { method: 'DELETE' }).catch(() => {})
+    ));
+    bouton.title = `Suppression... ${Math.min(i + taillePaquet, idsUniques.length)}/${idsUniques.length}`;
+  }
+  bouton.title = titreInitial;
+
+  afficherToast(`${idsUniques.length} doublon(s) supprimé(s).`);
+  await chargerPoints();
+});
 
 function mettreAJourBadgeAttente() {
   const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
@@ -1226,7 +1301,7 @@ function ajouterMarqueur(point, enAttente, positionAffichee) {
   const marqueur = L.marker([lat, lng], { icon: icone }).addTo(coucheMarqueurs);
   marqueur.on('click', () => {
     if (modeAjoutManuel) {
-      positionTemporaire = { lat: point.lat, lng: point.lng, accuracy: null, manuel: true, elevation: point.elevation };
+      positionTemporaire = { lat: point.lat, lng: point.lng, accuracy: accuracyActuelleSiRecente(), manuel: true, elevation: point.elevation };
       desactiverModeAjoutManuel();
       ouvrirModalAjout();
       return;

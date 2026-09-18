@@ -4,7 +4,7 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 
 ## À quoi ça sert ?
 
-- Tu marques sur une carte l'endroit exact où tu as trouvé un champignon
+- Tu marques sur une carte l'endroit exact où tu as trouvé un champignon, pour t'en souvenir l'année prochaine
 - Tu précises le type de champignon, la date, et des notes — l'altitude est récupérée automatiquement
 - Ces coins sont partagés avec un **groupe privé** : seules les personnes ayant le code d'accès du groupe les voient
 - L'application fonctionne **hors-ligne** (zones sans réseau en forêt) : les points sont enregistrés localement puis synchronisés dès que le réseau revient
@@ -30,7 +30,7 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 | Code affiché | **Touche-le pour le copier** dans le presse-papiers, prêt à partager |
 | 🔄 | Forcer la synchronisation immédiate des points en attente |
 | 👥 | Liste des membres du groupe et la date/heure de leur dernière connexion |
-| ☰ | Liste de tous les points affichés, triable (proximité, plus récent, plus ancien) |
+| ☰ | Liste de tous les points affichés, triable (proximité, plus récent, plus ancien) — bouton 🧹 pour supprimer les doublons exacts (même date + mêmes coordonnées) |
 | ▽ | Ouvre les filtres (recherche, type de champignon, mois, département), avec un bouton **RAZ** pour tout réinitialiser |
 | ⇄ | Change de groupe (déconnexion de cet appareil) |
 
