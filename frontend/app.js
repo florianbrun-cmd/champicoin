@@ -172,6 +172,19 @@ document.getElementById('form-creer').addEventListener('submit', async (e) => {
   }
 });
 
+// Recentre la carte sur la position actuelle (ou, à défaut, la vue par défaut) : appelée à
+// chaque entrée dans un groupe, pour ne jamais repartir sur la vue laissée par un groupe précédent.
+function recentrerSurPositionActuelle() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => carte.setView([pos.coords.latitude, pos.coords.longitude], 13),
+      () => carte.setView([46.6, 2.2], 6)
+    );
+  } else {
+    carte.setView([46.6, 2.2], 6);
+  }
+}
+
 async function entrerDansGroupe(groupe) {
   groupeCourant = groupe;
   localStorage.setItem('champicoin_groupe', JSON.stringify(groupe));
@@ -180,6 +193,7 @@ async function entrerDansGroupe(groupe) {
   ecranGroupe.classList.add('cache');
   ecranCarte.classList.remove('cache');
   initCarte();
+  recentrerSurPositionActuelle();
   await chargerPoints();
   await synchroniserPointsEnAttente(true);
   signalerPresence();
@@ -361,13 +375,6 @@ function initCarte() {
   L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(carte);
 
   coucheMarqueurs = L.layerGroup().addTo(carte);
-
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => carte.setView([pos.coords.latitude, pos.coords.longitude], 13),
-      () => {}
-    );
-  }
 
   if (navigator.connection && navigator.connection.addEventListener) {
     navigator.connection.addEventListener('change', () => {
