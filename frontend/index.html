@@ -84,6 +84,8 @@
       <div id="puces-filtre" class="puces-filtre"></div>
       <div class="ligne-filtre-titre">Mois</div>
       <div id="puces-filtre-mois" class="puces-filtre"></div>
+      <div class="ligne-filtre-titre">Date d'import (GPX/photo)</div>
+      <div id="puces-filtre-import" class="puces-filtre"></div>
       <div class="ligne-filtre-titre">Département</div>
       <div id="puces-filtre-departement" class="puces-filtre">
         <button class="puce-filtre actif" id="puce-departement-charger">Charger les départements…</button>
@@ -133,6 +135,13 @@
     <div id="progression-import" class="progression-import cache">
       <div class="progression-import-texte" id="progression-import-texte">Import en cours...</div>
       <div class="progression-import-fond"><div class="progression-import-barre" id="progression-import-barre"></div></div>
+    </div>
+
+    <div id="navigation-import" class="navigation-import cache">
+      <button type="button" id="btn-nav-precedent" class="btn-nav-import">◀</button>
+      <span id="nav-import-compteur">1/1</span>
+      <button type="button" id="btn-nav-suivant" class="btn-nav-import">▶</button>
+      <button type="button" id="btn-nav-fermer" class="btn-nav-import">✕</button>
     </div>
   </div>
 

@@ -1035,6 +1035,17 @@ html, body {
   display: block;
 }
 
+.marqueur-temporaire {
+  font-size: 30px;
+  filter: drop-shadow(0 3px 4px rgba(0,0,0,0.4));
+  cursor: grab;
+  animation: rebond-marqueur 0.6s ease infinite alternate;
+}
+@keyframes rebond-marqueur {
+  from { transform: translateY(0); }
+  to { transform: translateY(-6px); }
+}
+
 .marqueur-productif {
   box-shadow: 0 0 0 3px #f0b429, 0 1px 5px rgba(0,0,0,0.4) !important;
 }
@@ -1094,6 +1105,37 @@ html, body {
   line-height: 17px;
   text-align: center;
   border: 1px solid #ccc;
+}
+
+.navigation-import {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border-radius: 24px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  z-index: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.btn-nav-import {
+  background: #f0f0f0;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+}
+#nav-import-compteur {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  min-width: 36px;
+  text-align: center;
 }
 
 .progression-import {

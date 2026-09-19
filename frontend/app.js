@@ -39,12 +39,14 @@ let coucheMarqueurs;
 let marqueurPosition = null;
 let derniereAccuracyConnue = null;
 let dernierCapConnu = null;
+let marqueurTemporaireAjout = null;
 let dernierePositionTimestamp = null;
 let groupeCourant = null;
 let positionTemporaire = null;
 let tousLesPoints = [];
 let typesFiltreActifs = new Set();
 let moisFiltreActifs = new Set();
+let importFiltreActifs = new Set();
 let departementsFiltreActifs = new Set();
 let departementParCle = new Map(); // "lat_lng" (arrondi) -> nom du département
 let modeAjoutManuel = false;
@@ -54,6 +56,7 @@ const btnFiltre = document.getElementById('btn-filtre');
 const barreFiltre = document.getElementById('barre-filtre');
 const pucesFiltre = document.getElementById('puces-filtre');
 const pucesFiltreMois = document.getElementById('puces-filtre-mois');
+const pucesFiltreImport = document.getElementById('puces-filtre-import');
 const pucesFiltreDepartement = document.getElementById('puces-filtre-departement');
 const rechercheFiltre = document.getElementById('recherche-filtre');
 const btnListe = document.getElementById('btn-liste');
@@ -419,6 +422,7 @@ function initCarte() {
       positionTemporaire = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: accuracyActuelleSiRecente(), elevation: null, manuel: true };
       desactiverModeAjoutManuel();
       ouvrirModalAjout();
+      placerMarqueurTemporaire(e.latlng.lat, e.latlng.lng);
       recupererAltitude(e.latlng.lat, e.latlng.lng);
       return;
     }
@@ -429,9 +433,11 @@ function initCarte() {
       setTimeout(() => carte.invalidateSize(), 0);
     }
     if (!panneauListe.classList.contains('cache')) {
+      const largeurPanneau = panneauListe.offsetWidth;
       panneauListe.classList.add('cache');
       pileBoutonsFlottants.classList.remove('cache');
       mettreAJourBadgeAttente();
+      carte.panBy([-largeurPanneau / 2, 0], { animate: true });
     }
   });
 }
@@ -622,7 +628,6 @@ document.getElementById('btn-supprimer-cache-carte').addEventListener('click', (
   if (!confirm('Supprimer toutes les tuiles de carte téléchargées pour un usage hors-ligne ?')) return;
   if (navigator.serviceWorker && navigator.serviceWorker.controller) {
     navigator.serviceWorker.controller.postMessage('vider-cache-tuiles');
-    alert('Cache de la carte vidé.');
   } else {
     alert('Le service worker n\'est pas encore actif. Recharge la page puis réessaie.');
   }
@@ -724,6 +729,7 @@ async function importerPhoto(fichier) {
     dateFound,
     notes: `Importé depuis une photo (${fichier.name})`,
     createdBy: getPseudo(),
+    sourceImport: 'photo',
     clientId: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2)
   };
 }
@@ -745,10 +751,41 @@ function importerGpx(texte) {
       dateFound: dateBalise ? dateBalise.slice(0, 10) : new Date().toISOString().slice(0, 10),
       notes: 'Importé depuis un fichier GPX',
       createdBy: getPseudo(),
+      sourceImport: 'gpx',
       clientId: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2)
     };
   }).filter(Boolean);
 }
+
+let tourneeImportPoints = [];
+let tourneeImportIndex = 0;
+
+function demarrerTourneeImport(points) {
+  if (!points || points.length === 0) return;
+  tourneeImportPoints = points;
+  tourneeImportIndex = 0;
+  afficherPointTournee();
+  document.getElementById('navigation-import').classList.toggle('cache', points.length <= 1);
+}
+
+function afficherPointTournee() {
+  const p = tourneeImportPoints[tourneeImportIndex];
+  if (!p) return;
+  carte.setView([p.lat, p.lng], Math.max(carte.getZoom(), 17));
+  document.getElementById('nav-import-compteur').textContent = `${tourneeImportIndex + 1}/${tourneeImportPoints.length}`;
+}
+
+document.getElementById('btn-nav-precedent').addEventListener('click', () => {
+  tourneeImportIndex = (tourneeImportIndex - 1 + tourneeImportPoints.length) % tourneeImportPoints.length;
+  afficherPointTournee();
+});
+document.getElementById('btn-nav-suivant').addEventListener('click', () => {
+  tourneeImportIndex = (tourneeImportIndex + 1) % tourneeImportPoints.length;
+  afficherPointTournee();
+});
+document.getElementById('btn-nav-fermer').addEventListener('click', () => {
+  document.getElementById('navigation-import').classList.add('cache');
+});
 
 document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
   const fichiers = Array.from(e.target.files || []);
@@ -841,11 +878,13 @@ document.getElementById('fichier-gpx').addEventListener('change', async (e) => {
       }
       await chargerPoints();
       afficherToast(totalDoublons > 0 ? `Import terminé : ${totalInseres} point(s) (${totalDoublons} déjà existant(s) ignoré(s)).` : 'Import terminé !');
+      demarrerTourneeImport(aImporter);
     } else {
       aImporter.forEach(p => ajouterAFileDAttente(p));
       construireBarreFiltre();
       rafraichirAffichageCarte();
       afficherToast('Import terminé (en attente de réseau pour synchroniser).');
+      demarrerTourneeImport(aImporter);
     }
   } catch (err) {
     alert('Erreur lors de la lecture des fichiers.');
@@ -913,6 +952,32 @@ function texteCoordonnees(point) {
   return texte;
 }
 
+function placerMarqueurTemporaire(lat, lng) {
+  retirerMarqueurTemporaire();
+  const icone = L.divIcon({
+    className: 'marqueur-temporaire-ancre',
+    html: `<div class="marqueur-temporaire">🍄</div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 34]
+  });
+  marqueurTemporaireAjout = L.marker([lat, lng], { icon: icone, draggable: true, zIndexOffset: 2000 }).addTo(carte);
+  marqueurTemporaireAjout.on('dragend', () => {
+    const pos = marqueurTemporaireAjout.getLatLng();
+    positionTemporaire.lat = pos.lat;
+    positionTemporaire.lng = pos.lng;
+    positionTemporaire.accuracy = null; // position ajustée à la main : la précision GPS d'origine ne s'applique plus
+    document.getElementById('coordonnees-ajout').textContent = texteCoordonnees(positionTemporaire);
+    recupererAltitude(pos.lat, pos.lng);
+  });
+}
+
+function retirerMarqueurTemporaire() {
+  if (marqueurTemporaireAjout) {
+    carte.removeLayer(marqueurTemporaireAjout);
+    marqueurTemporaireAjout = null;
+  }
+}
+
 function ouvrirModalAjout() {
   document.getElementById('titre-modal-ajout').textContent = 'Nouveau coin 🍄';
   document.getElementById('id-champignon-edite').value = '';
@@ -941,6 +1006,7 @@ document.getElementById('btn-annuler-ajout').addEventListener('click', () => {
   document.getElementById('modal-ajout').classList.add('cache');
   document.getElementById('form-champignon').reset();
   positionTemporaire = null;
+  retirerMarqueurTemporaire();
 });
 
 document.getElementById('form-champignon').addEventListener('submit', async (e) => {
@@ -978,6 +1044,7 @@ document.getElementById('form-champignon').addEventListener('submit', async (e) 
     if (estEnLigne()) await chargerPoints(); // remplace l'entrée optimiste par l'état réel du serveur
   }
   positionTemporaire = null;
+  retirerMarqueurTemporaire();
 });
 
 async function modifierPoint(id, donnees) {
@@ -1353,12 +1420,17 @@ function calculerPointsFiltres() {
       const dept = departementDe(point);
       if (!dept || !departementsFiltreActifs.has(dept)) return false;
     }
+    if (importFiltreActifs.size > 0) {
+      const dateImport = dateImportDe(point);
+      if (!dateImport || !importFiltreActifs.has(dateImport)) return false;
+    }
     return true;
   });
 }
 
 function filtresActifs() {
   return typesFiltreActifs.size > 0 || moisFiltreActifs.size > 0 || departementsFiltreActifs.size > 0 ||
+    importFiltreActifs.size > 0 ||
     rechercheFiltre.value.trim() !== '';
 }
 
@@ -1366,6 +1438,7 @@ document.getElementById('btn-raz-filtres').addEventListener('click', () => {
   typesFiltreActifs.clear();
   moisFiltreActifs.clear();
   departementsFiltreActifs.clear();
+  importFiltreActifs.clear();
   rechercheFiltre.value = '';
   construireBarreFiltre();
   rafraichirAffichageCarte();
@@ -1481,6 +1554,7 @@ function ajouterMarqueur(point, enAttente, positionAffichee, memeCoinPlusieursFo
       positionTemporaire = { lat: point.lat, lng: point.lng, accuracy: accuracyActuelleSiRecente(), manuel: true, elevation: point.elevation };
       desactiverModeAjoutManuel();
       ouvrirModalAjout();
+      placerMarqueurTemporaire(point.lat, point.lng);
       return;
     }
     afficherDetailPoint(point);
@@ -1559,7 +1633,40 @@ function afficherZone(zone) {
 function construireBarreFiltre() {
   construireFiltreTypes();
   construireFiltreMois();
+  construireFiltreImport();
   construireFiltreDepartements();
+}
+
+function dateImportDe(point) {
+  if (!point.sourceImport || !point.createdAt) return null;
+  return point.createdAt.slice(0, 10); // "AAAA-MM-JJ"
+}
+
+function construireFiltreImport() {
+  const datesPresentes = [...new Set(tousLesPoints.map(({ point }) => dateImportDe(point)).filter(Boolean))].sort().reverse();
+  pucesFiltreImport.innerHTML = '';
+  if (datesPresentes.length === 0) return; // aucun point importé : la section reste vide
+
+  importFiltreActifs.forEach(d => { if (!datesPresentes.includes(d)) importFiltreActifs.delete(d); });
+
+  const puceTout = document.createElement('button');
+  puceTout.className = 'puce-filtre' + (importFiltreActifs.size === 0 ? ' actif' : '');
+  puceTout.textContent = 'Tous';
+  puceTout.addEventListener('click', () => { importFiltreActifs.clear(); construireFiltreImport(); rafraichirAffichageCarte(); ajusterVueAuxPointsFiltres(); });
+  pucesFiltreImport.appendChild(puceTout);
+
+  datesPresentes.forEach(d => {
+    const puce = document.createElement('button');
+    puce.className = 'puce-filtre' + (importFiltreActifs.has(d) ? ' actif' : '');
+    puce.textContent = formaterDate(d);
+    puce.addEventListener('click', () => {
+      if (importFiltreActifs.has(d)) importFiltreActifs.delete(d); else importFiltreActifs.add(d);
+      construireFiltreImport();
+      rafraichirAffichageCarte();
+      ajusterVueAuxPointsFiltres();
+    });
+    pucesFiltreImport.appendChild(puce);
+  });
 }
 
 function construireFiltreTypes() {
@@ -1748,11 +1855,21 @@ function construireListe() {
 }
 
 btnListe.addEventListener('click', () => {
+  const etaitOuvert = !panneauListe.classList.contains('cache');
+  const largeurPanneau = panneauListe.offsetWidth || 300;
   panneauListe.classList.toggle('cache');
   const ouvert = !panneauListe.classList.contains('cache');
   pileBoutonsFlottants.classList.toggle('cache', ouvert);
-  if (ouvert) { compteurAttente.classList.add('cache'); construireListe(); }
-  else mettreAJourBadgeAttente();
+  if (ouvert) {
+    compteurAttente.classList.add('cache');
+    construireListe();
+    // Le panneau recouvre la partie droite de la carte : on décale la vue pour
+    // ne pas laisser de points cachés dessous (même logique que pour le filtre).
+    carte.panBy([largeurPanneau / 2, 0], { animate: true });
+  } else {
+    mettreAJourBadgeAttente();
+    if (etaitOuvert) carte.panBy([-largeurPanneau / 2, 0], { animate: true });
+  }
 });
 triListe.addEventListener('change', construireListe);
 
@@ -1847,6 +1964,7 @@ document.getElementById('btn-dupliquer-point').addEventListener('click', () => {
   };
   document.getElementById('modal-detail').classList.add('cache');
   ouvrirModalAjout();
+  placerMarqueurTemporaire(point.lat, point.lng);
   // Pré-remplit le même type, pour aller vite ; la date reste sur aujourd'hui
   selectionnerTypeChampignon(point.mushroomType);
 });

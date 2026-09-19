@@ -17,6 +17,7 @@ const spotSchema = new mongoose.Schema({
   lng: { type: Number, required: true },
   accuracy: { type: Number, default: null }, // précision GPS en mètres (null si placé manuellement)
   elevation: { type: Number, default: null }, // altitude en mètres, récupérée automatiquement
+  sourceImport: { type: String, default: null }, // 'gpx', 'photo', ou null si ajouté normalement
   mushroomType: { type: String, required: true },
   icon: { type: String, default: '🍄' },
   dateFound: { type: String, required: true }, // format YYYY-MM-DD

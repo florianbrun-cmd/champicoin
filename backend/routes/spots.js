@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
 // Ajouter un nouveau point
 router.post('/', async (req, res) => {
   try {
-    const { groupCode, lat, lng, accuracy, elevation, mushroomType, icon, dateFound, notes, clientId, author } = req.body;
+    const { groupCode, lat, lng, accuracy, elevation, mushroomType, icon, dateFound, notes, clientId, author, sourceImport } = req.body;
     const groupe = await verifierGroupe(groupCode);
     if (!groupe) return res.status(403).json({ error: 'Code de groupe invalide.' });
 
@@ -66,6 +66,7 @@ router.post('/', async (req, res) => {
       dateFound: dateFound || maintenant.toISOString().slice(0, 10),
       notes: notes || '',
       clientId: clientId || null,
+      sourceImport: sourceImport || null,
       createdBy: author || '',
       updatedBy: author || '',
       updatedAt: maintenant
@@ -202,6 +203,7 @@ router.post('/bulk', async (req, res) => {
         dateFound: p.dateFound || maintenant.toISOString().slice(0, 10),
         notes: p.notes || '',
         clientId: p.clientId || null,
+        sourceImport: p.sourceImport || null,
         createdBy: p.author || '',
         updatedBy: p.author || '',
         updatedAt: maintenant

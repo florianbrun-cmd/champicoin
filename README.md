@@ -80,6 +80,7 @@ La fenêtre se ferme en cliquant n'importe où en dehors.
 - **Type** : sélection multiple des espèces à afficher
 - **Mois** : n'affiche que les mois où au moins un coin existe
 - **Département** : calculé automatiquement (nécessite d'être en ligne la première fois, puis mis en cache)
+- **Date d'import** : pour les points importés depuis un GPX ou une photo, filtre par date d'import (n'apparaît que s'il y a des points importés)
 - **RAZ** : réinitialise tous les filtres en un clic
 
 Dès qu'un filtre est actif, la carte se recentre pour englober tous les points correspondants.

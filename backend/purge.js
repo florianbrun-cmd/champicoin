@@ -13,11 +13,13 @@ const PurgeLog = require('./models/PurgeLog');
 const TROIS_MOIS_MS = 90 * 24 * 60 * 60 * 1000;
 const VERIF_QUOTIDIENNE_MS = 24 * 60 * 60 * 1000;
 
-// Supprime définitivement les points archivés créés il y a plus de 3 mois, et met à
-// jour la date de dernière purge (utilisée aussi bien en manuel qu'en automatique).
+// Supprime définitivement les points archivés DÉCOUVERTS il y a plus de 3 mois (dateFound,
+// pas la date d'import/création en base), et met à jour la date de dernière purge.
 async function executerPurge() {
-  const seuil = new Date(Date.now() - TROIS_MOIS_MS);
-  const resultat = await Spot.deleteMany({ archive: true, createdAt: { $lt: seuil } });
+  // dateFound est stockée au format "AAAA-MM-JJ" : une comparaison de chaînes fonctionne
+  // correctement pour ce format (ordre lexicographique = ordre chronologique).
+  const seuil = new Date(Date.now() - TROIS_MOIS_MS).toISOString().slice(0, 10);
+  const resultat = await Spot.deleteMany({ archive: true, dateFound: { $lt: seuil } });
 
   let log = await PurgeLog.findOne({ cle: 'purge_archives' });
   if (!log) log = await PurgeLog.create({ cle: 'purge_archives' });
