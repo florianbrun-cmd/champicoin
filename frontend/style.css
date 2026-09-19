@@ -983,7 +983,14 @@ html, body {
   display: flex;
   justify-content: space-between;
   font-size: 13px;
-  padding: 4px 0;
+  padding: 6px 4px;
+}
+.resultat-code-cliquable {
+  cursor: pointer;
+  border-radius: 6px;
+}
+.resultat-code-cliquable:active {
+  background: #e8e8e8;
 }
 .resultat-code-valeur {
   font-weight: 700;

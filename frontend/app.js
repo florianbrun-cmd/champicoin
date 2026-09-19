@@ -136,8 +136,18 @@ document.getElementById('btn-code-oublie').addEventListener('click', async () =>
     }
 
     zoneResultats.innerHTML = groupes.map(g => `
-      <div class="resultat-code-item"><span>${g.name}</span><span class="resultat-code-valeur">${g.code}</span></div>
+      <div class="resultat-code-item resultat-code-cliquable" data-code="${g.code}">
+        <span>${g.name}</span><span class="resultat-code-valeur">${g.code}</span>
+      </div>
     `).join('');
+
+    zoneResultats.querySelectorAll('.resultat-code-cliquable').forEach(el => {
+      el.addEventListener('click', () => {
+        document.getElementById('code-groupe').value = el.dataset.code;
+        zoneResultats.classList.add('cache');
+        document.getElementById('code-groupe').focus();
+      });
+    });
   } catch (err) {
     zoneResultats.innerHTML = 'Erreur réseau, réessaie plus tard.';
   }
