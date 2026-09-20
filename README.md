@@ -60,7 +60,7 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 
 Le formulaire d'ajout permet de choisir le type de champignon dans une liste (classée par ordre alphabétique, avec "Autres" pour saisir un nom libre), la date, des notes. Les coordonnées GPS et l'altitude sont calculées et affichées automatiquement.
 
-Dans la fenêtre de détail d'un point, **touche le nom du champignon** pour le modifier (type, date, notes). La position elle-même devient ajustable : **maintiens ton doigt environ une seconde sur le 🍄** affiché sur la carte pour le "libérer", puis fais-le glisser à l'endroit correct.
+Pour corriger la position d'un point directement, **maintiens ton doigt (ou le clic) environ une seconde sur son repère sur la carte** pour le "libérer", puis fais-le glisser à l'endroit correct — pas besoin d'ouvrir sa fiche ni de passer par "Modifier". Pour changer son type, sa date ou ses notes, touche le nom du champignon dans sa fiche de détail.
 
 ## Le détail d'un point
 

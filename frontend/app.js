@@ -347,6 +347,10 @@ document.getElementById('btn-membres').addEventListener('click', async () => {
   }
 });
 
+document.getElementById('btn-fermer-membres').addEventListener('click', () => {
+  document.getElementById('modal-membres').classList.add('cache');
+});
+
 // ==================================================
 // 2. CARTE
 // ==================================================
@@ -998,7 +1002,13 @@ function placerMarqueurTemporaire(lat, lng, type) {
     iconAnchor: [17, 34]
   });
   marqueurTemporaireAjout = L.marker([lat, lng], { icon: icone, zIndexOffset: 2000 }).addTo(carte);
-  activerAppuiLongPourDeplacer(marqueurTemporaireAjout);
+  activerAppuiLongPourDeplacer(marqueurTemporaireAjout, (lat, lng) => {
+    positionTemporaire.lat = lat;
+    positionTemporaire.lng = lng;
+    positionTemporaire.accuracy = null; // position ajustée à la main : la précision GPS d'origine ne s'applique plus
+    document.getElementById('coordonnees-ajout').textContent = texteCoordonnees(positionTemporaire);
+    recupererAltitude(lat, lng);
+  });
 }
 
 const SEUIL_APPUI_LONG_MS = 550;
@@ -1008,7 +1018,7 @@ const SEUIL_MOUVEMENT_ANNULATION_PX = 12;
 // s'appuyant sur ce dernier, activer le glissé après le délai d'appui long arrivait
 // TROP TARD pour capter le mousedown/touchstart déjà en cours, rendant le déplacement
 // impossible à la souris (fonctionnait par chance au doigt sur certains appareils).
-function activerAppuiLongPourDeplacer(marqueur) {
+function activerAppuiLongPourDeplacer(marqueur, surRelachement) {
   let minuteur = null;
   let depart = null;
   let libere = false;
@@ -1058,13 +1068,9 @@ function activerAppuiLongPourDeplacer(marqueur) {
     if (libere) {
       carte.dragging.enable();
       const pos = marqueur.getLatLng();
-      positionTemporaire.lat = pos.lat;
-      positionTemporaire.lng = pos.lng;
-      positionTemporaire.accuracy = null; // position ajustée à la main : la précision GPS d'origine ne s'applique plus
-      document.getElementById('coordonnees-ajout').textContent = texteCoordonnees(positionTemporaire);
-      recupererAltitude(pos.lat, pos.lng);
       const el = marqueur.getElement();
       if (el) el.classList.remove('marqueur-temporaire-libere');
+      surRelachement(pos.lat, pos.lng);
     }
     libere = false;
     depart = null;
@@ -1732,6 +1738,34 @@ function ajouterMarqueur(point, enAttente, positionAffichee, memeCoinPlusieursFo
     }
     afficherDetailPoint(point);
   });
+
+  if (point._id) {
+    activerAppuiLongPourDeplacer(marqueur, (lat, lng) => deplacerPointExistant(point, lat, lng));
+  }
+}
+
+async function deplacerPointExistant(point, lat, lng) {
+  if (!estEnLigne()) { alert('Une connexion internet est nécessaire pour déplacer un point.'); return; }
+  try {
+    const reponse = await fetch(`${API_BASE}/spots/${point._id}?groupCode=${encodeURIComponent(groupeCourant.code)}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        groupCode: groupeCourant.code,
+        mushroomType: point.mushroomType,
+        dateFound: point.dateFound,
+        notes: point.notes,
+        icon: point.icon,
+        lat, lng,
+        author: getPseudo()
+      })
+    });
+    if (!reponse.ok) throw new Error('Échec de la mise à jour');
+    afficherToast('Position mise à jour.');
+    await chargerPoints();
+  } catch (err) {
+    alert('Impossible de déplacer ce point pour le moment. Réessaie plus tard.');
+    await chargerPoints(); // remet le marqueur à sa vraie position en cas d'échec
+  }
 }
 
 function ajouterMarqueurZone(zone) {
@@ -2077,7 +2111,7 @@ function afficherDetailPoint(point, depuisZone) {
     if (derniereZoneAffichee) afficherZone(derniereZoneAffichee);
   };
 
-  document.getElementById('detail-date').textContent = formaterDate(point.dateFound);
+  document.getElementById('detail-date').textContent = 'Date de découverte : ' + formaterDate(point.dateFound);
   document.getElementById('detail-notes').textContent = point.notes || '';
   document.getElementById('detail-coordonnees').textContent = texteCoordonnees(point);
 
@@ -2160,7 +2194,7 @@ document.querySelectorAll('.btn-app-navigation').forEach(bouton => {
 });
 
 // Fermeture des modales en cliquant en dehors de leur contenu
-['modal-detail', 'modal-zone', 'modal-membres', 'modal-itineraire', 'modal-archives'].forEach(id => {
+['modal-detail', 'modal-zone', 'modal-itineraire', 'modal-archives'].forEach(id => {
   document.getElementById(id).addEventListener('click', (e) => {
     if (e.target.id === id) document.getElementById(id).classList.add('cache');
   });
