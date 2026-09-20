@@ -88,7 +88,7 @@ router.post('/', async (req, res) => {
 // Modifier un point existant : conserve l'ancienne version dans l'historique
 router.put('/:id', async (req, res) => {
   try {
-    const { groupCode, lat, lng, mushroomType, icon, dateFound, notes, author } = req.body;
+    const { groupCode, lat, lng, elevation, mushroomType, icon, dateFound, notes, author } = req.body;
     const groupe = await verifierGroupe(groupCode);
     if (!groupe) return res.status(403).json({ error: 'Code de groupe invalide.' });
 
@@ -124,6 +124,7 @@ router.put('/:id', async (req, res) => {
     if (lat !== undefined && lng !== undefined) {
       misAJour.lat = lat;
       misAJour.lng = lng;
+      if (elevation !== undefined) misAJour.elevation = elevation;
     }
 
     const spot = await Spot.findOneAndUpdate(

@@ -422,7 +422,6 @@ function initCarte() {
       positionTemporaire = { lat: e.latlng.lat, lng: e.latlng.lng, accuracy: accuracyActuelleSiRecente(), elevation: null, manuel: true };
       desactiverModeAjoutManuel();
       ouvrirModalAjout();
-      placerMarqueurTemporaire(e.latlng.lat, e.latlng.lng);
       recupererAltitude(e.latlng.lat, e.latlng.lng);
       return;
     }
@@ -460,7 +459,12 @@ function demarrerSuiviPosition() {
   navigator.geolocation.watchPosition(
     (pos) => {
       const latlng = [pos.coords.latitude, pos.coords.longitude];
-      dernierCapConnu = pos.coords.heading;
+      // Le cap GPS (déplacement) n'existe que lorsqu'on bouge suffisamment vite ; à l'arrêt,
+      // il vaut null — on garde alors le dernier cap connu (boussole de l'appareil, voir
+      // activerSuiviBoussole) au lieu d'effacer la flèche de direction.
+      if (pos.coords.heading !== null && pos.coords.heading !== undefined && !isNaN(pos.coords.heading)) {
+        dernierCapConnu = pos.coords.heading;
+      }
       const icone = construireIconePosition(dernierCapConnu);
       if (!marqueurPosition) {
         marqueurPosition = L.marker(latlng, { icon: icone, zIndexOffset: 1000 }).addTo(carte);
@@ -474,6 +478,37 @@ function demarrerSuiviPosition() {
     (err) => console.warn('Suivi de position indisponible :', err.message),
     { enableHighAccuracy: true, maximumAge: 5000 }
   );
+}
+
+// Boussole de l'appareil : fournit un cap même à l'arrêt (contrairement au cap GPS, qui
+// nécessite un déplacement). Nécessite une autorisation sur iOS, demandée au premier
+// geste de l'utilisateur (voir l'appel dans le contrôle de localisation).
+let boussoleActivee = false;
+
+function gererOrientationAppareil(event) {
+  let cap = null;
+  if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
+    cap = event.webkitCompassHeading; // iOS Safari : déjà en degrés depuis le nord, sens horaire
+  } else if (event.alpha !== null && event.alpha !== undefined) {
+    cap = 360 - event.alpha; // approximation raisonnable pour Android/Chrome
+  }
+  if (cap === null || isNaN(cap)) return;
+
+  dernierCapConnu = cap;
+  if (marqueurPosition) marqueurPosition.setIcon(construireIconePosition(dernierCapConnu));
+}
+
+function activerSuiviBoussole() {
+  if (boussoleActivee || typeof DeviceOrientationEvent === 'undefined') return;
+  boussoleActivee = true;
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(reponse => {
+      if (reponse === 'granted') window.addEventListener('deviceorientation', gererOrientationAppareil);
+    }).catch(() => {});
+  } else {
+    window.addEventListener('deviceorientationabsolute', gererOrientationAppareil);
+    window.addEventListener('deviceorientation', gererOrientationAppareil);
+  }
 }
 
 // Renvoie la précision GPS actuelle de l'appareil si elle est connue et récente
@@ -496,6 +531,7 @@ function ajouterControleLocalisation() {
       L.DomEvent.on(lien, 'click', L.DomEvent.stopPropagation);
       L.DomEvent.on(lien, 'click', L.DomEvent.preventDefault);
       L.DomEvent.on(lien, 'click', () => {
+        activerSuiviBoussole();
         const centrerSur = (lat, lng) => carte.setView([lat, lng], carte.getMaxZoom());
         if (marqueurPosition) {
           const p = marqueurPosition.getLatLng();
@@ -641,6 +677,7 @@ const btnLocaliser = document.getElementById('btn-localiser');
 const bandeauPlacementManuel = document.getElementById('bandeau-placement-manuel');
 
 btnLocaliser.addEventListener('click', () => {
+  activerSuiviBoussole();
   modeAjoutManuel = !modeAjoutManuel;
   btnLocaliser.classList.toggle('actif', modeAjoutManuel);
   bandeauPlacementManuel.classList.toggle('cache', !modeAjoutManuel);
@@ -960,7 +997,11 @@ function placerMarqueurTemporaire(lat, lng) {
     iconSize: [34, 34],
     iconAnchor: [17, 34]
   });
-  marqueurTemporaireAjout = L.marker([lat, lng], { icon: icone, draggable: true, zIndexOffset: 2000 }).addTo(carte);
+  // Le marqueur démarre NON déplaçable : un appui long dessus le "libère" pour le
+  // déplacement (évite le conflit courant sur mobile où glisser un marqueur fait
+  // bouger la carte au lieu du marqueur).
+  marqueurTemporaireAjout = L.marker([lat, lng], { icon: icone, draggable: false, zIndexOffset: 2000 }).addTo(carte);
+
   marqueurTemporaireAjout.on('dragend', () => {
     const pos = marqueurTemporaireAjout.getLatLng();
     positionTemporaire.lat = pos.lat;
@@ -968,14 +1009,108 @@ function placerMarqueurTemporaire(lat, lng) {
     positionTemporaire.accuracy = null; // position ajustée à la main : la précision GPS d'origine ne s'applique plus
     document.getElementById('coordonnees-ajout').textContent = texteCoordonnees(positionTemporaire);
     recupererAltitude(pos.lat, pos.lng);
+    reverrouillerMarqueurTemporaire();
   });
+
+  activerAppuiLongPourDeplacer(marqueurTemporaireAjout);
+}
+
+const SEUIL_APPUI_LONG_MS = 550;
+const SEUIL_MOUVEMENT_ANNULATION_PX = 12;
+
+function activerAppuiLongPourDeplacer(marqueur) {
+  let minuteur = null;
+  let depart = null;
+
+  function coordonneesEvenement(e) {
+    if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    return { x: e.clientX, y: e.clientY };
+  }
+
+  function demarrerAppui(e) {
+    depart = coordonneesEvenement(e);
+    minuteur = setTimeout(() => {
+      marqueur.dragging.enable();
+      const el = marqueur.getElement();
+      if (el) el.classList.add('marqueur-temporaire-libere');
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, SEUIL_APPUI_LONG_MS);
+  }
+
+  function bougerPendantAttente(e) {
+    if (!depart || !minuteur) return;
+    const pos = coordonneesEvenement(e);
+    const distance = Math.hypot(pos.x - depart.x, pos.y - depart.y);
+    if (distance > SEUIL_MOUVEMENT_ANNULATION_PX) {
+      clearTimeout(minuteur);
+      minuteur = null;
+    }
+  }
+
+  function relacherAppui() {
+    clearTimeout(minuteur);
+    minuteur = null;
+  }
+
+  marqueur.on('add', () => {
+    const el = marqueur.getElement();
+    if (!el) return;
+    el.addEventListener('touchstart', demarrerAppui, { passive: true });
+    el.addEventListener('touchmove', bougerPendantAttente, { passive: true });
+    el.addEventListener('touchend', relacherAppui);
+    el.addEventListener('touchcancel', relacherAppui);
+    el.addEventListener('mousedown', demarrerAppui);
+    document.addEventListener('mousemove', bougerPendantAttente);
+    document.addEventListener('mouseup', relacherAppui);
+    marqueur._nettoyageAppuiLong = () => {
+      document.removeEventListener('mousemove', bougerPendantAttente);
+      document.removeEventListener('mouseup', relacherAppui);
+      clearTimeout(minuteur);
+    };
+  });
+}
+
+function reverrouillerMarqueurTemporaire() {
+  if (!marqueurTemporaireAjout) return;
+  marqueurTemporaireAjout.dragging.disable();
+  const el = marqueurTemporaireAjout.getElement();
+  if (el) el.classList.remove('marqueur-temporaire-libere');
 }
 
 function retirerMarqueurTemporaire() {
   if (marqueurTemporaireAjout) {
+    if (marqueurTemporaireAjout._nettoyageAppuiLong) marqueurTemporaireAjout._nettoyageAppuiLong();
     carte.removeLayer(marqueurTemporaireAjout);
     marqueurTemporaireAjout = null;
   }
+}
+
+let panAppliquePourModalAjout = 0;
+
+function recentrerCartePourModal(lat, lng) {
+  requestAnimationFrame(() => {
+    const feuille = document.querySelector('#modal-ajout .modal-contenu');
+    const zoneCarte = document.getElementById('carte');
+    if (!feuille || !zoneCarte || !carte) return;
+    const hauteurFeuille = feuille.offsetHeight;
+    const hauteurCarte = zoneCarte.offsetHeight;
+    const pointEcran = carte.latLngToContainerPoint([lat, lng]);
+    const limiteVisible = hauteurCarte - hauteurFeuille - 20;
+    if (pointEcran.y > limiteVisible) {
+      const decalage = pointEcran.y - limiteVisible / 2;
+      panAppliquePourModalAjout = decalage;
+      carte.panBy([0, decalage], { animate: true });
+    } else {
+      panAppliquePourModalAjout = 0;
+    }
+  });
+}
+
+function annulerRecentrageModal() {
+  if (panAppliquePourModalAjout && carte) {
+    carte.panBy([0, -panAppliquePourModalAjout], { animate: true });
+  }
+  panAppliquePourModalAjout = 0;
 }
 
 function ouvrirModalAjout() {
@@ -988,7 +1123,9 @@ function ouvrirModalAjout() {
   document.getElementById('notes-champignon').value = '';
   document.getElementById('coordonnees-ajout').textContent = texteCoordonnees(positionTemporaire);
   document.getElementById('apercu-icone-type').src = urlIcone('autre');
+  document.getElementById('astuce-deplacement').classList.add('cache');
   document.getElementById('modal-ajout').classList.remove('cache');
+  if (positionTemporaire) recentrerCartePourModal(positionTemporaire.lat, positionTemporaire.lng);
 }
 
 function ouvrirModalModification(point) {
@@ -997,9 +1134,15 @@ function ouvrirModalModification(point) {
   selectionnerTypeChampignon(point.mushroomType);
   document.getElementById('date-trouvee').value = point.dateFound;
   document.getElementById('notes-champignon').value = point.notes || '';
-  document.getElementById('coordonnees-ajout').textContent = texteCoordonnees(point);
+  // La position devient ajustable au glissé (appui long) pendant la modification,
+  // contrairement à la création où le point vient d'être tapé précisément.
+  positionTemporaire = { lat: point.lat, lng: point.lng, accuracy: point.accuracy, elevation: point.elevation, manuel: true };
+  document.getElementById('coordonnees-ajout').textContent = texteCoordonnees(positionTemporaire);
   document.getElementById('modal-detail').classList.add('cache');
+  document.getElementById('astuce-deplacement').classList.remove('cache');
   document.getElementById('modal-ajout').classList.remove('cache');
+  placerMarqueurTemporaire(point.lat, point.lng);
+  recentrerCartePourModal(point.lat, point.lng);
 }
 
 document.getElementById('btn-annuler-ajout').addEventListener('click', () => {
@@ -1007,6 +1150,7 @@ document.getElementById('btn-annuler-ajout').addEventListener('click', () => {
   document.getElementById('form-champignon').reset();
   positionTemporaire = null;
   retirerMarqueurTemporaire();
+  annulerRecentrageModal();
 });
 
 document.getElementById('form-champignon').addEventListener('submit', async (e) => {
@@ -1029,6 +1173,11 @@ document.getElementById('form-champignon').addEventListener('submit', async (e) 
   document.getElementById('form-champignon').reset();
 
   if (idEdite) {
+    if (positionTemporaire) {
+      donneesFormulaire.lat = positionTemporaire.lat;
+      donneesFormulaire.lng = positionTemporaire.lng;
+      donneesFormulaire.elevation = positionTemporaire.elevation;
+    }
     await modifierPoint(idEdite, donneesFormulaire);
   } else {
     const nouveauPoint = {
@@ -1045,6 +1194,7 @@ document.getElementById('form-champignon').addEventListener('submit', async (e) 
   }
   positionTemporaire = null;
   retirerMarqueurTemporaire();
+  annulerRecentrageModal();
 });
 
 async function modifierPoint(id, donnees) {
@@ -1307,6 +1457,29 @@ window.addEventListener('offline', () => {
 
 let promesseChargementEnCours = null;
 
+function chargerPointsDepuisCache(cleCache) {
+  try {
+    const cache = JSON.parse(localStorage.getItem(cleCache) || 'null');
+    if (!cache || !Array.isArray(cache.spots)) return false;
+
+    const idsVus = new Set();
+    cache.spots.forEach(spot => {
+      if (spot._id) {
+        if (idsVus.has(spot._id)) return;
+        idsVus.add(spot._id);
+      }
+      tousLesPoints.push({ point: spot, enAttente: false });
+    });
+    if (cache.spots.length > 0) {
+      const dateSauvegarde = new Date(cache.sauvegardeLe).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      afficherToast(`Points hors-ligne (dernière synchro : ${dateSauvegarde})`);
+    }
+    return true;
+  } catch (err) {
+    return false; // pas de cache disponible, on continue avec la file d'attente seule
+  }
+}
+
 function chargerPoints() {
   // Si un chargement est déjà en cours, on renvoie la même promesse au lieu d'en
   // démarrer un second en parallèle : c'était la cause du doublon d'affichage
@@ -1319,7 +1492,11 @@ function chargerPoints() {
 
     if (estEnLigne()) {
       try {
-        const reponse = await fetch(`${API_BASE}/spots?groupCode=${encodeURIComponent(groupeCourant.code)}`);
+        const controleur = new AbortController();
+        const delaiMax = setTimeout(() => controleur.abort(), 8000);
+        const reponse = await fetch(`${API_BASE}/spots?groupCode=${encodeURIComponent(groupeCourant.code)}`, { signal: controleur.signal });
+        clearTimeout(delaiMax);
+        if (!reponse.ok) throw new Error('Réponse serveur invalide');
         const data = await reponse.json();
         const idsVus = new Set();
         (data.spots || []).forEach(spot => {
@@ -1334,27 +1511,14 @@ function chargerPoints() {
           localStorage.setItem(cleCache, JSON.stringify({ spots: data.spots || [], sauvegardeLe: new Date().toISOString() }));
         } catch (err) { /* stockage plein ou indisponible : pas bloquant */ }
       } catch (err) {
-        console.warn('Impossible de charger les points depuis le serveur.');
+        // La requête a échoué malgré une connexion déclarée présente (réseau faible/instable) :
+        // on se rabat sur la dernière copie connue plutôt que d'afficher une carte vide.
+        console.warn('Impossible de charger les points depuis le serveur, repli sur le cache local.');
+        chargerPointsDepuisCache(cleCache);
       }
     } else {
       // Hors-ligne : on affiche la dernière copie connue des points de ce groupe, s'il en existe une
-      try {
-        const cache = JSON.parse(localStorage.getItem(cleCache) || 'null');
-        if (cache && Array.isArray(cache.spots)) {
-          const idsVus = new Set();
-          cache.spots.forEach(spot => {
-            if (spot._id) {
-              if (idsVus.has(spot._id)) return;
-              idsVus.add(spot._id);
-            }
-            tousLesPoints.push({ point: spot, enAttente: false });
-          });
-          if (cache.spots.length > 0) {
-            const dateSauvegarde = new Date(cache.sauvegardeLe).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-            afficherToast(`Points hors-ligne (dernière synchro : ${dateSauvegarde})`);
-          }
-        }
-      } catch (err) { /* pas de cache disponible, on continue avec la file d'attente seule */ }
+      chargerPointsDepuisCache(cleCache);
     }
 
     const file = JSON.parse(localStorage.getItem('champicoin_file_attente') || '[]');
@@ -1554,7 +1718,6 @@ function ajouterMarqueur(point, enAttente, positionAffichee, memeCoinPlusieursFo
       positionTemporaire = { lat: point.lat, lng: point.lng, accuracy: accuracyActuelleSiRecente(), manuel: true, elevation: point.elevation };
       desactiverModeAjoutManuel();
       ouvrirModalAjout();
-      placerMarqueurTemporaire(point.lat, point.lng);
       return;
     }
     afficherDetailPoint(point);
@@ -1964,7 +2127,6 @@ document.getElementById('btn-dupliquer-point').addEventListener('click', () => {
   };
   document.getElementById('modal-detail').classList.add('cache');
   ouvrirModalAjout();
-  placerMarqueurTemporaire(point.lat, point.lng);
   // Pré-remplit le même type, pour aller vite ; la date reste sur aujourd'hui
   selectionnerTypeChampignon(point.mushroomType);
 });

@@ -1035,11 +1035,25 @@ html, body {
   display: block;
 }
 
+.astuce-deplacement {
+  font-size: 12px;
+  color: #888;
+  margin-top: 4px;
+  font-style: italic;
+}
+
 .marqueur-temporaire {
   font-size: 30px;
   filter: drop-shadow(0 3px 4px rgba(0,0,0,0.4));
   cursor: grab;
   animation: rebond-marqueur 0.6s ease infinite alternate;
+  transition: transform 0.15s ease;
+}
+.marqueur-temporaire-libere {
+  animation: none;
+  transform: scale(1.35);
+  cursor: grabbing;
+  filter: drop-shadow(0 0 0 3px rgba(232,135,30,0.5)) drop-shadow(0 4px 6px rgba(0,0,0,0.5));
 }
 @keyframes rebond-marqueur {
   from { transform: translateY(0); }

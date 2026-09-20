@@ -38,7 +38,7 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 - **🎯** (sous les boutons de zoom +/-) : recentre la carte sur ta position actuelle, au zoom maximum
 - **↑** (juste dessous) : remet la carte plein nord — la flèche indique où se trouve le nord si tu as fait pivoter la carte
 - **Rotation** : pivote la carte librement à deux doigts (comme sur Google Maps)
-- **Point bleu** : ta position en direct ; une petite flèche indique la direction de ton déplacement si le téléphone la détecte
+- **Point bleu** : ta position en direct ; une flèche indique la direction — fonctionne même à l'arrêt grâce à la boussole de l'appareil
 - **Icônes de champignon** : chaque coin enregistré, avec une icône propre à chaque espèce
 - **Icône avec un ⏳** : ce point n'est pas encore synchronisé avec le serveur (créé hors-ligne, en attente de réseau)
 - **Halo doré** : un point régulièrement réactualisé au fil des années — repère rapide d'un coin productif
@@ -60,7 +60,7 @@ Une application privée pour noter tes coins à champignons sur une carte, et le
 
 Le formulaire d'ajout permet de choisir le type de champignon dans une liste (classée par ordre alphabétique, avec "Autres" pour saisir un nom libre), la date, des notes. Les coordonnées GPS et l'altitude sont calculées et affichées automatiquement.
 
-Dans la fenêtre de détail d'un point, **touche le nom du champignon** pour le modifier directement (type, date, notes — pas la position ; pour corriger un emplacement, supprime le point et recrée-le).
+Dans la fenêtre de détail d'un point, **touche le nom du champignon** pour le modifier (type, date, notes). La position elle-même devient ajustable : **maintiens ton doigt environ une seconde sur le 🍄** affiché sur la carte pour le "libérer", puis fais-le glisser à l'endroit correct.
 
 ## Le détail d'un point
 
