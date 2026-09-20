@@ -989,92 +989,103 @@ function texteCoordonnees(point) {
   return texte;
 }
 
-function placerMarqueurTemporaire(lat, lng) {
+function placerMarqueurTemporaire(lat, lng, type) {
   retirerMarqueurTemporaire();
   const icone = L.divIcon({
     className: 'marqueur-temporaire-ancre',
-    html: `<div class="marqueur-temporaire">🍄</div>`,
+    html: `<div class="marqueur-temporaire">${htmlIcone(type || 'Autres')}<span class="croix-precision">✛</span></div>`,
     iconSize: [34, 34],
     iconAnchor: [17, 34]
   });
-  // Le marqueur démarre NON déplaçable : un appui long dessus le "libère" pour le
-  // déplacement (évite le conflit courant sur mobile où glisser un marqueur fait
-  // bouger la carte au lieu du marqueur).
-  marqueurTemporaireAjout = L.marker([lat, lng], { icon: icone, draggable: false, zIndexOffset: 2000 }).addTo(carte);
-
-  marqueurTemporaireAjout.on('dragend', () => {
-    const pos = marqueurTemporaireAjout.getLatLng();
-    positionTemporaire.lat = pos.lat;
-    positionTemporaire.lng = pos.lng;
-    positionTemporaire.accuracy = null; // position ajustée à la main : la précision GPS d'origine ne s'applique plus
-    document.getElementById('coordonnees-ajout').textContent = texteCoordonnees(positionTemporaire);
-    recupererAltitude(pos.lat, pos.lng);
-    reverrouillerMarqueurTemporaire();
-  });
-
+  marqueurTemporaireAjout = L.marker([lat, lng], { icon: icone, zIndexOffset: 2000 }).addTo(carte);
   activerAppuiLongPourDeplacer(marqueurTemporaireAjout);
 }
 
 const SEUIL_APPUI_LONG_MS = 550;
 const SEUIL_MOUVEMENT_ANNULATION_PX = 12;
 
+// Glissé entièrement géré à la main (plutôt que via marker.dragging de Leaflet) : en
+// s'appuyant sur ce dernier, activer le glissé après le délai d'appui long arrivait
+// TROP TARD pour capter le mousedown/touchstart déjà en cours, rendant le déplacement
+// impossible à la souris (fonctionnait par chance au doigt sur certains appareils).
 function activerAppuiLongPourDeplacer(marqueur) {
   let minuteur = null;
   let depart = null;
+  let libere = false;
 
   function coordonneesEvenement(e) {
     if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
     return { x: e.clientX, y: e.clientY };
   }
 
-  function demarrerAppui(e) {
+  function deplacerVers(e) {
+    const pos = coordonneesEvenement(e);
+    const rect = document.getElementById('carte').getBoundingClientRect();
+    const latlng = carte.containerPointToLatLng(L.point(pos.x - rect.left, pos.y - rect.top));
+    marqueur.setLatLng(latlng);
+  }
+
+  function demarrer(e) {
     depart = coordonneesEvenement(e);
+    libere = false;
     minuteur = setTimeout(() => {
-      marqueur.dragging.enable();
+      libere = true;
+      carte.dragging.disable(); // la carte ne doit plus bouger pendant qu'on positionne le marqueur
       const el = marqueur.getElement();
       if (el) el.classList.add('marqueur-temporaire-libere');
       if (navigator.vibrate) navigator.vibrate(30);
     }, SEUIL_APPUI_LONG_MS);
   }
 
-  function bougerPendantAttente(e) {
-    if (!depart || !minuteur) return;
-    const pos = coordonneesEvenement(e);
-    const distance = Math.hypot(pos.x - depart.x, pos.y - depart.y);
-    if (distance > SEUIL_MOUVEMENT_ANNULATION_PX) {
-      clearTimeout(minuteur);
-      minuteur = null;
+  function pendantDeplacement(e) {
+    if (!depart) return;
+    if (!libere) {
+      const pos = coordonneesEvenement(e);
+      if (Math.hypot(pos.x - depart.x, pos.y - depart.y) > SEUIL_MOUVEMENT_ANNULATION_PX) {
+        clearTimeout(minuteur);
+        minuteur = null;
+      }
+      return;
     }
+    if (e.cancelable) e.preventDefault();
+    deplacerVers(e);
   }
 
-  function relacherAppui() {
+  function terminer() {
     clearTimeout(minuteur);
     minuteur = null;
+    if (libere) {
+      carte.dragging.enable();
+      const pos = marqueur.getLatLng();
+      positionTemporaire.lat = pos.lat;
+      positionTemporaire.lng = pos.lng;
+      positionTemporaire.accuracy = null; // position ajustée à la main : la précision GPS d'origine ne s'applique plus
+      document.getElementById('coordonnees-ajout').textContent = texteCoordonnees(positionTemporaire);
+      recupererAltitude(pos.lat, pos.lng);
+      const el = marqueur.getElement();
+      if (el) el.classList.remove('marqueur-temporaire-libere');
+    }
+    libere = false;
+    depart = null;
   }
 
   marqueur.on('add', () => {
     const el = marqueur.getElement();
     if (!el) return;
-    el.addEventListener('touchstart', demarrerAppui, { passive: true });
-    el.addEventListener('touchmove', bougerPendantAttente, { passive: true });
-    el.addEventListener('touchend', relacherAppui);
-    el.addEventListener('touchcancel', relacherAppui);
-    el.addEventListener('mousedown', demarrerAppui);
-    document.addEventListener('mousemove', bougerPendantAttente);
-    document.addEventListener('mouseup', relacherAppui);
+    el.addEventListener('touchstart', demarrer, { passive: true });
+    el.addEventListener('touchmove', pendantDeplacement, { passive: false });
+    el.addEventListener('touchend', terminer);
+    el.addEventListener('touchcancel', terminer);
+    el.addEventListener('mousedown', demarrer);
+    document.addEventListener('mousemove', pendantDeplacement);
+    document.addEventListener('mouseup', terminer);
     marqueur._nettoyageAppuiLong = () => {
-      document.removeEventListener('mousemove', bougerPendantAttente);
-      document.removeEventListener('mouseup', relacherAppui);
+      document.removeEventListener('mousemove', pendantDeplacement);
+      document.removeEventListener('mouseup', terminer);
       clearTimeout(minuteur);
+      carte.dragging.enable();
     };
   });
-}
-
-function reverrouillerMarqueurTemporaire() {
-  if (!marqueurTemporaireAjout) return;
-  marqueurTemporaireAjout.dragging.disable();
-  const el = marqueurTemporaireAjout.getElement();
-  if (el) el.classList.remove('marqueur-temporaire-libere');
 }
 
 function retirerMarqueurTemporaire() {
@@ -1141,7 +1152,7 @@ function ouvrirModalModification(point) {
   document.getElementById('modal-detail').classList.add('cache');
   document.getElementById('astuce-deplacement').classList.remove('cache');
   document.getElementById('modal-ajout').classList.remove('cache');
-  placerMarqueurTemporaire(point.lat, point.lng);
+  placerMarqueurTemporaire(point.lat, point.lng, point.mushroomType);
   recentrerCartePourModal(point.lat, point.lng);
 }
 
