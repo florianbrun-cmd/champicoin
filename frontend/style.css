@@ -259,6 +259,17 @@ html, body {
   z-index: 1000;
 }
 
+/* La fenêtre d'ajout/modification laisse la carte interactive au-dessus du formulaire
+   (nécessaire pour pouvoir glisser le repère temporaire) : seul le formulaire lui-même
+   capte les clics, le reste de l'overlay est transparent aux événements. */
+#modal-ajout {
+  background: transparent;
+  pointer-events: none;
+}
+#modal-ajout .modal-contenu {
+  pointer-events: auto;
+}
+
 .modal-contenu {
   background: white;
   width: 100%;
