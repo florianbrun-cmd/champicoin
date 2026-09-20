@@ -1069,23 +1069,21 @@ function activerAppuiLongPourDeplacer(marqueur) {
     depart = null;
   }
 
-  marqueur.on('add', () => {
-    const el = marqueur.getElement();
-    if (!el) return;
-    el.addEventListener('touchstart', demarrer, { passive: true });
-    el.addEventListener('touchmove', pendantDeplacement, { passive: false });
-    el.addEventListener('touchend', terminer);
-    el.addEventListener('touchcancel', terminer);
-    el.addEventListener('mousedown', demarrer);
-    document.addEventListener('mousemove', pendantDeplacement);
-    document.addEventListener('mouseup', terminer);
-    marqueur._nettoyageAppuiLong = () => {
-      document.removeEventListener('mousemove', pendantDeplacement);
-      document.removeEventListener('mouseup', terminer);
-      clearTimeout(minuteur);
-      carte.dragging.enable();
-    };
-  });
+  const el = marqueur.getElement();
+  if (!el) return;
+  el.addEventListener('touchstart', demarrer, { passive: true });
+  el.addEventListener('touchmove', pendantDeplacement, { passive: false });
+  el.addEventListener('touchend', terminer);
+  el.addEventListener('touchcancel', terminer);
+  el.addEventListener('mousedown', demarrer);
+  document.addEventListener('mousemove', pendantDeplacement);
+  document.addEventListener('mouseup', terminer);
+  marqueur._nettoyageAppuiLong = () => {
+    document.removeEventListener('mousemove', pendantDeplacement);
+    document.removeEventListener('mouseup', terminer);
+    clearTimeout(minuteur);
+    carte.dragging.enable();
+  };
 }
 
 function retirerMarqueurTemporaire() {
