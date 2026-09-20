@@ -1026,6 +1026,7 @@ function activerAppuiLongPourDeplacer(marqueur) {
   }
 
   function demarrer(e) {
+    e.stopPropagation();
     depart = coordonneesEvenement(e);
     libere = false;
     minuteur = setTimeout(() => {
