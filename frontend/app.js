@@ -266,12 +266,12 @@ statutConnexion.addEventListener('click', () => {
   if (!modeAvionForce) synchroniserPointsEnAttente(true);
 });
 
-function afficherToast(texte) {
+function afficherToast(texte, duree = 1500) {
   const toast = document.createElement('div');
   toast.className = 'toast-copie';
   toast.textContent = texte;
   document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 1500);
+  setTimeout(() => toast.remove(), duree);
 }
 
 document.getElementById('btn-copier-code').addEventListener('click', async () => {
@@ -1070,6 +1070,8 @@ function activerAppuiLongPourDeplacer(marqueur, surRelachement) {
       const pos = marqueur.getLatLng();
       const el = marqueur.getElement();
       if (el) el.classList.remove('marqueur-temporaire-libere');
+      marqueur._vientDeGlisser = true;
+      setTimeout(() => { marqueur._vientDeGlisser = false; }, 300);
       surRelachement(pos.lat, pos.lng);
     }
     libere = false;
@@ -1488,7 +1490,7 @@ function chargerPointsDepuisCache(cleCache) {
     });
     if (cache.spots.length > 0) {
       const dateSauvegarde = new Date(cache.sauvegardeLe).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-      afficherToast(`Points hors-ligne (dernière synchro : ${dateSauvegarde})`);
+      afficherToast(`Points hors-ligne (dernière synchro : ${dateSauvegarde})`, 3000);
     }
     return true;
   } catch (err) {
@@ -1730,6 +1732,7 @@ function ajouterMarqueur(point, enAttente, positionAffichee, memeCoinPlusieursFo
   const lng = positionAffichee ? positionAffichee.lng : point.lng;
   const marqueur = L.marker([lat, lng], { icon: icone }).addTo(coucheMarqueurs);
   marqueur.on('click', () => {
+    if (marqueur._vientDeGlisser) return;
     if (modeAjoutManuel) {
       positionTemporaire = { lat: point.lat, lng: point.lng, accuracy: accuracyActuelleSiRecente(), manuel: true, elevation: point.elevation };
       desactiverModeAjoutManuel();
